@@ -17,6 +17,18 @@ from collections import defaultdict
 from scipy.special import softmax
 
 class boards:
+    def compute_similarity(word1, word2, vocab, embeddings):
+      '''
+      given two words, a vocabulary and an underlying embedding space for that vocbulary, computes cosine similarity
+      '''
+      w1_vec = embeddings[list(vocab.Word).index(word1)]
+      w1_vec = w1_vec.reshape((1, embeddings.shape[1]))
+      w2_vec = embeddings[list(vocab.Word).index(word2)]
+      w2_vec = w2_vec.reshape((1, embeddings.shape[1]))
+      similarity = 1 - scipy.spatial.distance.cdist(w1_vec, w2_vec, 'cosine')
+      print(f"similarity between {word1} and {word2}=", similarity)
+      return similarity
+
     def generate_random_board(vocabulary,n):
         '''
         given a vocabulary of words, generates a random sample of n words
@@ -29,7 +41,7 @@ class boards:
 
     def generate_distractor(w1, w2, embeddings, vocabulary, distance):
         '''
-        given 2 words, generates a close distractor based on underlying semantic embeddings using midpoint aveage
+        given 2 words, generates a close distractor based on underlying semantic embeddings using midpoint 
         '''
 
         w1_vec = embeddings[list(vocabulary.Word).index(w1)]
@@ -44,7 +56,7 @@ class boards:
         distractor = random.sample(closest_words[distance:distance+10], 1)
         return distractor
     
-    def create_final_board(data_path, embeddings, vocab):
+    def create_final_board(data_path, embeddings, vocab, n):
         '''
         saves a board for w1 & w2
         '''
@@ -57,12 +69,115 @@ class boards:
             w2 = row["Word2"]
             wordpair = row["wordpair"]
 
-            b = boards.generate_random_board(vocab, n = 17)
+            b = boards.generate_random_board(vocab, n)
             d = boards.generate_distractor(w1, w2, embeddings, vocab, 50)
             final_boards[wordpair] = b + d + [w1,w2]
         
         with open('../data/boards.json', 'w') as f:
             json.dump(final_boards, f)   
+
+class RSA:
+
+  def compute_board_combos(board_name, boards):
+    '''
+    inputs:
+    (1) board_name ("e1_board1_words")
+    output:
+    all pairwise combinations of the words on the board
+
+    '''
+    board = boards[board_name]
+    all_possible_combs = list(itertools.combinations(board, 2))
+    combs_df = pd.DataFrame(all_possible_combs, columns =['Word1', 'Word2'])
+    combs_df["wordpair"] = combs_df["Word1"] + '-'+ combs_df["Word2"]
+    return combs_df
+
+  def create_board_matrix(combs_df, context_board, embeddings, vocab, candidates):
+    '''
+    inputs:
+    (1) combs_df: all combination pairs from a given board
+    (2) context_board: the specific board ("lion-tiger")
+    (3) embeddings: embedding space to consider
+    (4) the vocab over which computations are occurring
+    (5) candidates over which the board matrix needs to be computed
+
+    output:
+    product similarities of given vocab to each wordpair
+    '''
+    # grab subset of words in given board and their corresponding glove vectors
+    board_df = vocab[vocab['Word'].isin(context_board)]
+    board_word_indices = list(board_df.index)
+    board_words = board_df["Word"]
+    board_vectors = embeddings[board_word_indices]
+
+    # need to obtain embeddings of candidate set
+
+    candidate_index = [list(vocab["Word"]).index(w) for w in candidates]
+
+    candidate_embeddings = embeddings[candidate_index]
+
+    ## clue_sims is the similarity of ALL clues in full candidate space to EACH word on board (size 20)
+    clue_sims = 1 - scipy.spatial.distance.cdist(board_vectors, candidate_embeddings, 'cosine')
+
+    ## once we have the similarities of the clue to the words on the board
+    ## we define a multiplicative function that maximizes these similarities
+    board_df.reset_index(inplace = True)
+
+    ## next we find the product of similarities between c-w1 and c-w2 for that specific board's 190 word-pairs
+    ## this gives us a 190 x N array of product similarities for a given combs_df
+    ## specifically, for each possible pair, pull out
+    f_w1_list =  np.array([clue_sims[board_df[board_df["Word"]==row["Word1"]].index.values[0]]
+                          for  index, row in combs_df.iterrows()])
+    f_w2_list =  np.array([clue_sims[board_df[board_df["Word"]==row["Word2"]].index.values[0]]
+                          for  index, row in combs_df.iterrows()])
+
+    # result is of length 190 for the product of similarities (i.e. how similar each word i is to BOTH in pair)
+    # note that cosine is in range [-1, 1] so we have to convert to [0,1] for this conjunction to be valid
+    return ((f_w1_list + 1) /2) * ((f_w2_list + 1)/2)
+
+  def literal_guesser(board_name, embeddings, candidates, vocab, boards):
+    '''
+    inputs are:
+    (1) board name ("e1_board1_words"),
+    (2) representation: embedding space to consider, representations
+    (3) modelname: 'glove'
+    (4) candidates (a list ['apple', 'mango'] etc.)
+
+    output:
+    softmax likelihood of different wordpairs under a given set of candidates
+
+    '''
+
+    board_combos = {board_name : RSA.compute_board_combos(board_name,boards) for board_name in boards.keys()}
+
+    board_matrices = {
+      board_name : RSA.create_board_matrix(board_combos[board_name], boards[board_name], embeddings, vocab, candidates)
+            for board_name in boards.keys()
+    }
+    boardmatrix = board_matrices[board_name]
+    return softmax(boardmatrix, axis=0)
+
+  def pragmatic_speaker(board_name, embeddings, candidates, vocab, boards, beta):
+    '''
+    inputs:
+    (1) board name ("e1_board1_words")
+    (2) beta: optimized parameter
+    (3) costweight: optimized weight to freequency
+    (4) representation: embedding space to consider, representations
+    (5) modelname: 'glove'
+    (6) candidates (a list of words/clues to iterate over)
+    (7) vocab
+    (8) boards: imported json file
+
+    outputs:
+    softmax likelihood of each possible clue in "candidates"
+
+    '''
+    #candidate_index = [list(vocab["Word"]).index(w) for w in candidates]
+    literal_guesser_prob = RSA.literal_guesser(board_name, embeddings, candidates, vocab, boards)
+    #clues_cost = -np.array([list(vocab["LgSUBTLWF"])[i] for i in candidate_index])
+    #utility = (1-costweight) * literal_guesser_prob - costweight * clues_cost
+    return softmax(beta*literal_guesser_prob, axis = 1)
 
 
 class SWOW:
@@ -186,140 +301,37 @@ class SWOW:
         with open('../data/clue_candidates.json', 'w') as f:
             json.dump(candidates, f)
 
-class RSA:
-
-  def compute_board_combos(board_name, boards):
-    '''
-    inputs:
-    (1) board_name ("e1_board1_words")
-    output:
-    all pairwise combinations of the words on the board
-
-    '''
-    board = boards[board_name]
-    all_possible_combs = list(itertools.combinations(board, 2))
-    combs_df = pd.DataFrame(all_possible_combs, columns =['Word1', 'Word2'])
-    combs_df["wordpair"] = combs_df["Word1"] + '-'+ combs_df["Word2"]
-    return combs_df
-
-  def get_wordpair_list(board_combos, board_name) :
-    '''
-    inputs:
-    (1) board_combos from compute_board_combos
-    (2) board__name ("e1_board1_words")
-    output:
-    a list of all wordpairs for a given board
-
-    '''
-    return list(board_combos[board_name]['wordpair'])
-
-  def create_board_matrix(combs_df, context_board, embeddings, vocab, candidates):
-    '''
-    inputs:
-    (1) combs_df: all combination pairs from a given board
-    (2) context_board: the specific board ("e1_board1_words")
-    (3) representation: embedding space to consider, representations
-    (4) modelname: 'glove'
-    (5) the vocab over which computations are occurring
-    (6) candidates over which the board matrix needs to be computed
-
-    output:
-    product similarities of given vocab to each wordpair
-    '''
-    # grab subset of words in given board and their corresponding glove vectors
-    board_df = vocab[vocab['Word'].isin(context_board)]
-    board_word_indices = list(board_df.index)
-    board_words = board_df["Word"]
-    board_vectors = embeddings[board_word_indices]
-
-    # need to obtain embeddings of candidate set
-
-    candidate_index = [list(vocab["Word"]).index(w) for w in candidates]
-
-    candidate_embeddings = embeddings[candidate_index]
-
-    ## clue_sims is the similarity of ALL clues in full candidate space to EACH word on board (size 20)
-    clue_sims = 1 - scipy.spatial.distance.cdist(board_vectors, candidate_embeddings, 'cosine')
-
-    ## once we have the similarities of the clue to the words on the board
-    ## we define a multiplicative function that maximizes these similarities
-    board_df.reset_index(inplace = True)
-
-    ## next we find the product of similarities between c-w1 and c-w2 for that specific board's 190 word-pairs
-    ## this gives us a 190 x N array of product similarities for a given combs_df
-    ## specifically, for each possible pair, pull out
-    f_w1_list =  np.array([clue_sims[board_df[board_df["Word"]==row["Word1"]].index.values[0]]
-                          for  index, row in combs_df.iterrows()])
-    f_w2_list =  np.array([clue_sims[board_df[board_df["Word"]==row["Word2"]].index.values[0]]
-                          for  index, row in combs_df.iterrows()])
-
-    # result is of length 190 for the product of similarities (i.e. how similar each word i is to BOTH in pair)
-    # note that cosine is in range [-1, 1] so we have to convert to [0,1] for this conjunction to be valid
-    return ((f_w1_list + 1) /2) * ((f_w2_list + 1)/2)
-
-  def literal_guesser(board_name, embeddings, candidates, vocab, boards):
-    '''
-    inputs are:
-    (1) board name ("e1_board1_words"),
-    (2) representation: embedding space to consider, representations
-    (3) modelname: 'glove'
-    (4) candidates (a list ['apple', 'mango'] etc.)
-
-    output:
-    softmax likelihood of different wordpairs under a given set of candidates
-
-    '''
-
-    board_combos = {board_name : RSA.compute_board_combos(board_name,boards) for board_name in boards.keys()}
-
-    board_matrices = {
-      board_name : RSA.create_board_matrix(board_combos[board_name], boards[board_name], embeddings, vocab, candidates)
-            for board_name in boards.keys()
-    }
-    boardmatrix = board_matrices[board_name]
-    return softmax(boardmatrix, axis=0)
-
-  def pragmatic_speaker(board_name, embeddings, candidates, vocab, boards, beta):
-    '''
-    inputs:
-    (1) board name ("e1_board1_words")
-    (2) beta: optimized parameter
-    (3) costweight: optimized weight to freequency
-    (4) representation: embedding space to consider, representations
-    (5) modelname: 'glove'
-    (6) candidates (a list of words/clues to iterate over)
-    (7) vocab
-    (8) boards: imported json file
-
-    outputs:
-    softmax likelihood of each possible clue in "candidates"
-
-    '''
-    #candidate_index = [list(vocab["Word"]).index(w) for w in candidates]
-    literal_guesser_prob = RSA.literal_guesser(board_name, embeddings, candidates, vocab, boards)
-    #clues_cost = -np.array([list(vocab["LgSUBTLWF"])[i] for i in candidate_index])
-    #utility = (1-costweight) * literal_guesser_prob - costweight * clues_cost
-    return softmax(beta*literal_guesser_prob, axis = 1)
-
-
 vocab = pd.read_csv("../data/vocab.csv")
 
 embeddings = pd.read_csv("../data/swow_associative_embeddings.csv").transpose().values
 
-#boards.create_final_board('../data', embeddings, vocab)
+word1 = "cat"
+word2 = "lion"
+
+boards.compute_similarity(word1, word2, vocab, embeddings)
+
+boards.create_final_board('../data', embeddings, vocab, 17)
 
 with open('../data/boards.json') as json_file:
     final_boards = json.load(json_file)
 
-swow = SWOW('../data')
-swow.save_candidates(budget_list=[4])
+wp = "snake-ash"
+combs = RSA.compute_board_combos(wp, final_boards)
+wp_index = list(combs.wordpair).index(wp)
 
-with open('../data/walk_data/union_candidates.json') as json_file:
-    union_candidates = json.load(json_file)
+x = RSA.pragmatic_speaker(wp, embeddings, list(vocab.Word), vocab, final_boards, beta=200)
 
-swow.choose_candidates(union_candidates)
+# need to get the ordered list of pragmatic clues
+candidate_probs = x[wp_index]
+sorted_prob_indices = np.argsort(candidate_probs)[::-1]
+sorted_words = [list(vocab.Word)[i] for i in sorted_prob_indices]
+print(f"top 10 clues for {wp}=", sorted_words[:10])
+pd.DataFrame(sorted_words).to_csv('../data/literal.csv')
 
-# x = RSA.pragmatic_speaker("lion-tiger", embeddings, ['cat', 'animal','plastic'], vocab, final_boards, beta=200)
+# swow = SWOW('../data')
+# swow.save_candidates(budget_list=[4])
 
-# pd.DataFrame(x).to_csv('../data/literal.csv')
+# with open('../data/walk_data/union_candidates.json') as json_file:
+#     union_candidates = json.load(json_file)
 
+# swow.choose_candidates(union_candidates)
