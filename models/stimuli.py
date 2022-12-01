@@ -261,7 +261,7 @@ class SWOW:
 
   def union_candidates(self, w1, w2, budget_list):
     '''
-    return a list of candidates sorted by likelihood of being visited based on values in budget
+    return a list of candidates and their count of visitation up until budget_list steps in the walks stored inside self.rw
     '''
 
     target_indices = self.get_nodes_by_word([w1, w2])
@@ -270,9 +270,13 @@ class SWOW:
     for search_budget in budget_list:
       for w1_walk, w2_walk in self.chunk(walks, 2) :
         for element in set(w1_walk[: search_budget]).union(w2_walk[: search_budget]) :
-          union_counts[search_budget][element] += 1
+          word_list = self.get_words_by_node([element])
+          word = word_list[0]
+          union_counts[search_budget][word] += 1
 
-    return union_counts
+    with open('../data/walk_data/union_counts.json', 'w') as f:
+      json.dump(union_counts, f)   
+    
 
   def save_candidates(self, budget_list):
     # Loop through word pairs
@@ -300,35 +304,72 @@ class SWOW:
         
         with open('../data/clue_candidates.json', 'w') as f:
             json.dump(candidates, f)
+  
+  def get_example_walk(self, w1, w2, budget_list):
+      target_indices = self.get_nodes_by_word([w1, w2])
+      walks = np.array([x for x in self.rw if x[0] in target_indices]).tolist()
+      random_index =  randrange(0, 999) # for selecting a random walk from the 1000 walks
+      w1_walk = self.get_words_by_node(walks[random_index])
+      w2_walk = self.get_words_by_node(walks[random_index+1])
 
-vocab = pd.read_csv("../data/vocab.csv")
+      intersection_counts = {budget : defaultdict(lambda: 0.000001) for budget in budget_list}
+      union_counts = {budget : defaultdict(lambda: 0.000001) for budget in budget_list}
 
-embeddings = pd.read_csv("../data/swow_associative_embeddings.csv").transpose().values
+      for search_budget in budget_list :
+          intersection = list(set(w1_walk[: search_budget]).intersection(w2_walk[: search_budget]))
+          intersection_counts[search_budget] = intersection
+          union = list(set(w1_walk[: search_budget]).union(w2_walk[: search_budget]))
+          union_counts[search_budget] = union
 
-word1 = "cat"
-word2 = "lion"
+      with open('../data/walk_data/example_intersection.json', 'w') as f:
+        json.dump(intersection_counts, f)
 
-boards.compute_similarity(word1, word2, vocab, embeddings)
+      with open('../data/walk_data/example_union.json', 'w') as f:
+        json.dump(union_counts, f)
 
-boards.create_final_board('../data', embeddings, vocab, 17)
+      with open('../data/walk_data/example_walk.json', 'w') as f:
+        json.dump({w1_walk[0]:w1_walk[:budget_list[0]], w2_walk[0]: w2_walk[:budget_list[0]]}, f)
 
-with open('../data/boards.json') as json_file:
-    final_boards = json.load(json_file)
+# vocab = pd.read_csv("../data/vocab.csv")
 
-wp = "snake-ash"
-combs = RSA.compute_board_combos(wp, final_boards)
-wp_index = list(combs.wordpair).index(wp)
+# embeddings = pd.read_csv("../data/swow_associative_embeddings.csv").transpose().values
 
-x = RSA.pragmatic_speaker(wp, embeddings, list(vocab.Word), vocab, final_boards, beta=200)
+# word1 = "cat"
+# word2 = "lion"
 
-# need to get the ordered list of pragmatic clues
-candidate_probs = x[wp_index]
-sorted_prob_indices = np.argsort(candidate_probs)[::-1]
-sorted_words = [list(vocab.Word)[i] for i in sorted_prob_indices]
-print(f"top 10 clues for {wp}=", sorted_words[:10])
-pd.DataFrame(sorted_words).to_csv('../data/literal.csv')
+# boards.compute_similarity(word1, word2, vocab, embeddings)
 
-# swow = SWOW('../data')
+# boards.create_final_board('../data', embeddings, vocab, 17)
+
+# with open('../data/boards.json') as json_file:
+#     final_boards = json.load(json_file)
+
+# wp = "snake-ash"
+# combs = RSA.compute_board_combos(wp, final_boards)
+# wp_index = list(combs.wordpair).index(wp)
+
+# x = RSA.pragmatic_speaker(wp, embeddings, list(vocab.Word), vocab, final_boards, beta=200)
+
+# # need to get the ordered list of pragmatic clues
+# candidate_probs = x[wp_index]
+# sorted_prob_indices = np.argsort(candidate_probs)[::-1]
+# sorted_words = [list(vocab.Word)[i] for i in sorted_prob_indices]
+# print(f"top 10 clues for {wp}=", sorted_words[:10])
+# pd.DataFrame(sorted_words).to_csv('../data/literal.csv')
+
+### RANDOM WALK CODE ###
+swow = SWOW('../data')
+## note that word1 and word2 MUST be in targets.csv for the code below to run
+word1 = "lion"
+word2 = "tiger"
+# the code below will save the total number of times each clue has been visited 
+# in the union for a certain number of steps (budget_list) inside the walk_data folder
+swow.union_candidates(word1,word2,[4])
+
+# the code below will save an example walk and its union/intersection words for a certain number of steps (budget_list)
+# inside the walk_data folder
+swow.get_example_walk(word1, word2, [16])
+
 # swow.save_candidates(budget_list=[4])
 
 # with open('../data/walk_data/union_candidates.json') as json_file:
