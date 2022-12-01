@@ -178,6 +178,9 @@ class RSA:
     #clues_cost = -np.array([list(vocab["LgSUBTLWF"])[i] for i in candidate_index])
     #utility = (1-costweight) * literal_guesser_prob - costweight * clues_cost
     return softmax(beta*literal_guesser_prob, axis = 1)
+  
+  def pragmatic_guesser(board_name, embeddings,candidates, vocab, boards, beta):
+    return softmax(np.log(RSA.pragmatic_speaker(board_name, embeddings, candidates, vocab, boards, beta)), axis = 0)
 
 
 class SWOW:
