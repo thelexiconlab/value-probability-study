@@ -15,8 +15,42 @@ import networkx as nx
 import math
 from collections import defaultdict
 from scipy.special import softmax
+from nltk import edit_distance
 
 class boards:
+
+    def reduce_vocab_embeddings(vocab, embeddings):
+      '''
+      applying some corrections:
+      (1) excluding any compound words
+      (2) excluding words with length < 2 or >12
+      (3) excluding words that are capitalized
+      '''
+
+      all_words = list(vocab.Word)
+
+      main_words = [w for w in all_words if (len(w) < 15) & (len(w) > 2) & (' ' not in w) & (w[0].islower()) & (w.isalpha())]
+      #print(set(all_words) ^ set(main_words))
+
+      main_word_indices = [all_words.index(w) for w in main_words]
+      new_vocab = vocab.loc[main_word_indices]
+      new_embeddings = embeddings[main_word_indices]
+      return new_vocab, new_embeddings
+
+    def select_wordpairs(vocab, embeddings, similarity_threshold, n):
+      # first compute similarity matrix
+      sim_matrix = 1 - scipy.spatial.distance.cdist(embeddings, embeddings, 'cosine')
+      # find all indices where similarity is > threshold and less than 0.99
+      greater = np.argwhere((sim_matrix > similarity_threshold) & (sim_matrix < 0.90)).tolist()
+      # random sample of list
+      wordpair_indices = random.sample(greater, n)
+      # once we have the indices, we need to convert to words
+      words = [[list(vocab.Word)[i], list(vocab.Word)[j]] for i, j in wordpair_indices]
+      df = pd.DataFrame(words, columns = ['Word1', 'Word2'])
+      df.to_csv('../data/targets.csv', index=False)
+      return df
+
+    
     def compute_similarity(word1, word2, vocab, embeddings):
       '''
       given two words, a vocabulary and an underlying embedding space for that vocbulary, computes cosine similarity
@@ -29,13 +63,10 @@ class boards:
       print(f"similarity between {word1} and {word2}=", similarity)
       return similarity
 
-    def generate_random_board(vocabulary,n):
+    def generate_random_board(words,n):
         '''
-        given a vocabulary of words, generates a random sample of n words
+        given a list of words, generates a random sample of n words
         '''
-
-        words = [w for w in list(vocabulary.Word) if " " not in w]
-
         board_sample = random.sample(words, n)
         return board_sample
 
@@ -52,14 +83,33 @@ class boards:
         y = np.array(similarities)
         y_sorted = np.argsort(-y).flatten() ## gives sorted indices
         closest_words = [list(vocabulary.Word)[i] for i in y_sorted]
+        # remove w1 and w2 from closest words
+        closest_words = [w for w in closest_words if w not in [w1,w2]]
+        # also remove words that have w1 or w2 in them (e.g., ground vs. underground)
+        closest_words = [w for w in closest_words if (w1 not in w) & (w2 not in w) & (w not in w1) & (w not in w2)]
+        # also remove words that are within edit distance of 3 or less from the targets
+        closest_words = [w for w in closest_words if (edit_distance(w1,w)>3) & (edit_distance(w2,w)>3)]
+        # also remove words that are targets or distractors
+        targets = pd.read_csv('../data/targets.csv')
+        targets = list(targets.Word1) + list(targets.Word2) + list(targets.distractor)
+        print("not in:", targets)
+        closest_words = [w for w in closest_words if w not in targets]
+
         # take random word from top 5-10
         distractor = random.sample(closest_words[distance:distance+10], 1)
-        return distractor
+
+        ## also return all other words that are NOT close
+
+        far_words = closest_words[1000:]
+        return distractor, far_words
     
     def create_final_board(data_path, embeddings, vocab, n):
         '''
-        saves a board for w1 & w2
+        saves a board for w1 & w2, 
+        but we need to make sure there is nothing else on the board that has similarity over a threshold to 
+        the wordpair or distractor
         '''
+        final_target_df = pd.DataFrame()
         target_df = pd.read_csv(f"{data_path}/targets.csv".format())
         target_df["wordpair"]= target_df["Word1"]+ "-"+target_df["Word2"]
         final_boards = {}
@@ -69,9 +119,16 @@ class boards:
             w2 = row["Word2"]
             wordpair = row["wordpair"]
 
-            b = boards.generate_random_board(vocab, n)
-            d = boards.generate_distractor(w1, w2, embeddings, vocab, 50)
-            final_boards[wordpair] = b + d + [w1,w2]
+            new_target_df = pd.DataFrame({ 'Word1':[w1] , 'Word2': [w2] ,'wordpair': [wordpair]})
+            
+            distractor, far_words = boards.generate_distractor(w1, w2, embeddings, vocab, 50)
+            new_target_df["distractor"] = distractor
+            final_target_df = pd.concat([final_target_df, new_target_df])
+            final_target_df.to_csv('../data/targets_and_distractors.csv', index=False)
+            print(f"distractor for {wordpair} is {distractor}")
+
+            b = boards.generate_random_board(far_words, n)
+            final_boards[wordpair] = b + distractor + [w1,w2]
         
         with open('../data/boards.json', 'w') as f:
             json.dump(final_boards, f)   
@@ -209,7 +266,7 @@ class SWOW:
     '''
     creates graph directly from pandas edge list and saves to file
     '''
-    path = path + 'walk_data/swow-strengths.csv'
+    path = path + '/walk_data/swow_strengths.csv'
     edges = pd.read_csv(path).rename(columns={'R123.Strength' : 'weight'})
     G = nx.from_pandas_edgelist(edges, 'cue', 'response', ['weight'], create_using=nx.DiGraph)
     G = nx.convert_node_labels_to_integers(G, label_attribute = 'word')
@@ -262,24 +319,37 @@ class SWOW:
     return [self.index_to_name[index] if index in self.index_to_name else None
             for index in nodes]
 
-  def union_candidates(self, w1, w2, budget_list):
+  def union_candidates(self, w1, w2, budget_value, vocab):
     '''
     return a list of candidates and their count of visitation up until budget_list steps in the walks stored inside self.rw
     '''
 
     target_indices = self.get_nodes_by_word([w1, w2])
     walks = np.array([x for x in self.rw if x[0] in target_indices]).tolist()
-    union_counts = {budget : defaultdict(lambda: 0.000001) for budget in budget_list}
-    for search_budget in budget_list:
-      for w1_walk, w2_walk in self.chunk(walks, 2) :
-        for element in set(w1_walk[: search_budget]).union(w2_walk[: search_budget]) :
-          word_list = self.get_words_by_node([element])
-          word = word_list[0]
-          union_counts[search_budget][word] += 1
+    union_counts = defaultdict(int)
 
-    with open('../data/walk_data/union_counts.json', 'w') as f:
-      json.dump(union_counts, f)   
+    # need to assign 0 count to all words first
+    for word in list(vocab.Word):
+      union_counts[word] = 0
     
+    # now we update these counts based on the walks themselves
+    for w1_walk, w2_walk in self.chunk(walks, 2) :  
+      for element in set(w1_walk[: budget_value]).union(w2_walk[: budget_value]) :
+        word_list = self.get_words_by_node([element])
+        word = word_list[0]
+        union_counts[word] += 1
+    
+    union_df = pd.DataFrame.from_dict(union_counts,orient='index', columns=['visit_count'])
+    union_df.reset_index(inplace=True)
+    union_df = union_df.rename(columns = {'index':'word'})
+
+    union_df = union_df.sort_values(by=['visit_count'], ascending=False)#.to_csv('../data/walk_data/union_counts.csv', index= False)
+
+    # with open('../data/walk_data/union_counts.json', 'w') as f:
+    #   json.dump(union_counts, f)   
+
+    return union_df
+  
 
   def save_candidates(self, budget_list):
     # Loop through word pairs
@@ -332,50 +402,77 @@ class SWOW:
 
       with open('../data/walk_data/example_walk.json', 'w') as f:
         json.dump({w1_walk[0]:w1_walk[:budget_list[0]], w2_walk[0]: w2_walk[:budget_list[0]]}, f)
+  
+  def get_final_clues(self, vocab, embeddings, final_boards, walk_steps):
+    '''
+    this function obtains the visit counts and RSA scores for all potential clues 
+    and then identifies the 4 clues
+    '''
+    # Loop through word pairs
+    final_clues_df = pd.DataFrame()
 
-# vocab = pd.read_csv("../data/vocab.csv")
+    for index, row in self.target_df.iterrows():
+      w1 = row['Word1']
+      w2 = row['Word2']
+      distractor = row['distractor']
+      wordpair = w1 + "-" + w2
+      print(wordpair)
+      # compute a df of visit counts
+      union_counts_df = self.union_candidates(row["Word1"], row["Word2"], walk_steps, vocab) 
+      print("visit counts complete")
+      # compute an np array of scores for different clues in vocab
+      combs = RSA.compute_board_combos(wordpair, final_boards)
+      wp_index = list(combs.wordpair).index(wordpair)
 
-# embeddings = pd.read_csv("../data/swow_associative_embeddings.csv").transpose().values
+      x = RSA.pragmatic_speaker(wordpair, embeddings, list(vocab.Word), vocab, final_boards, beta=200)
+      print("RSA calculation complete")
 
-# word1 = "cat"
-# word2 = "lion"
+      # need to get the ordered list of pragmatic clues
+      candidate_probs = x[wp_index]
+      candidate_probs = pd.DataFrame(candidate_probs, columns=['pragmatic_score'])
+      candidate_probs["word"] = list(vocab.Word)
+    
+      # need to merge these two together
+      final_df = candidate_probs.merge(union_counts_df, on='word', how='left')
+      final_df["wordpair"] = wordpair
+      final_df["product"] = final_df["visit_count"]*final_df["pragmatic_score"]
+      final_df = final_df.sort_values(by="product", ascending = False)
 
-# boards.compute_similarity(word1, word2, vocab, embeddings)
+      # exclude the words themselves and distractor from this list
+      w1w2 = [w1, w2,distractor]
+      final_df = final_df[~final_df['word'].isin(w1w2)]
+      
+      # exclude any clues that are within short edit distances of the targets
+      final_df["edit_w1"] = [edit_distance(w, w1) for w in list(final_df["word"])]
+      final_df["edit_w2"] = [edit_distance(w, w2) for w in list(final_df["word"])]
+      final_df = final_df[(final_df['edit_w1'] > 3) & (final_df['edit_w2']> 3)]
+      final_df.to_csv("../data/final_df_1.csv", index= False)
+      # exclude clues that are too long or short or contain special characters
+      list_of_words = list(final_df.word)
 
-# boards.create_final_board('../data', embeddings, vocab, 17)
+      list_of_words = [w for w in list_of_words if (len(w) < 15) & (len(w) > 2) & (' ' not in w) & (w[0].islower()) & (w.isalpha()) & (w1 not in w) & (w2 not in w) & (w not in w1) & (w not in w2) & (w not in distractor) & (distractor not in w)]
 
-# with open('../data/boards.json') as json_file:
-#     final_boards = json.load(json_file)
+      final_df = final_df[final_df['word'].isin(list_of_words)]
+      final_df.to_csv("../data/final_df.csv", index= False)
 
-# wp = "snake-ash"
-# combs = RSA.compute_board_combos(wp, final_boards)
-# wp_index = list(combs.wordpair).index(wp)
+      final_df = final_df.reset_index()
 
-# x = RSA.pragmatic_speaker(wp, embeddings, list(vocab.Word), vocab, final_boards, beta=200)
+      
 
-# # need to get the ordered list of pragmatic clues
-# candidate_probs = x[wp_index]
-# sorted_prob_indices = np.argsort(candidate_probs)[::-1]
-# sorted_words = [list(vocab.Word)[i] for i in sorted_prob_indices]
-# print(f"top 10 clues for {wp}=", sorted_words[:10])
-# pd.DataFrame(sorted_words).to_csv('../data/literal.csv')
+      #print(final_df)
+     
+      clues_df = pd.DataFrame({'wordpair': [wordpair]})
+      clues_df["high_a_high_p"] = final_df.loc[final_df['product'].idxmax()]["word"]
+      
+      clues_df["high_a_low_p"] = list((final_df[(final_df["visit_count"]> 50) & (final_df["pragmatic_score"] < .0001)]).sample(n=1)["word"])[0]
+      clues_df["low_a_high_p"] = list((final_df[(final_df["visit_count"]< 50) & (final_df["pragmatic_score"] > .0001)]).sample(n=1)["word"])[0]
 
-### RANDOM WALK CODE ###
-swow = SWOW('../data')
-## note that word1 and word2 MUST be in targets.csv for the code below to run
-word1 = "lion"
-word2 = "tiger"
-# the code below will save the total number of times each clue has been visited 
-# in the union for a certain number of steps (budget_list) inside the walk_data folder
-swow.union_candidates(word1,word2,[4])
+      top50 = final_df[:50]
+      clues_df["low_a_low_p"] = list((top50[(top50["visit_count"]< 50) & (top50["pragmatic_score"] < .0001)]).sample(n=1)["word"])[0]
 
-# the code below will save an example walk and its union/intersection words for a certain number of steps (budget_list)
-# inside the walk_data folder
-swow.get_example_walk(word1, word2, [16])
+      final_clues_df = pd.concat([final_clues_df, clues_df])
+      
+      final_clues_df.to_csv('../data/clues.csv', index=False)
+      print("merging complete")
 
-# swow.save_candidates(budget_list=[4])
 
-# with open('../data/walk_data/union_candidates.json') as json_file:
-#     union_candidates = json.load(json_file)
-
-# swow.choose_candidates(union_candidates)
