@@ -23,7 +23,9 @@ var stimuli = [
       "flavorful",
       "ingredients"
     ],
-    "clue": "food"
+    "clue": "food",
+    "accessibility": 1,
+    "pragmatics": 1
   },
   {
     "words": "carrots-nectarine",
@@ -49,6 +51,8 @@ var stimuli = [
       "carrots",
       "nectarine"
     ],
-    "clue": "orange"
+    "clue": "orange",
+    "accessibility": 2,
+    "pragmatics": 2
   }
 ]

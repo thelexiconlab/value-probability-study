@@ -27,7 +27,7 @@ var jsPsychConnector = (function (jspsych) {
           button_html: {
               type: jspsych.ParameterType.HTML_STRING,
               pretty_name: "Button HTML",
-              default: '<button id="board-button-%num%" class="connector-button" data-choice="%num%">%choice%</button>', //class="jspsych-btn"
+              default: '<button id="board-button-%num%" class="connector-button" data-choice="%num%">%choice%</button>', 
               array: true,
           },
           /** Any content here will be displayed under the button(s). */
@@ -61,9 +61,9 @@ var jsPsychConnector = (function (jspsych) {
               default: "8px",
           },
           /** If true, then trial will end when user responds. */
-          response_ends_trial: {
+          randomize_buttons: {
               type: jspsych.ParameterType.BOOL,
-              pretty_name: "Response ends trial",
+              pretty_name: "Randomize buttons",
               default: true,
           },
       },
@@ -80,10 +80,26 @@ var jsPsychConnector = (function (jspsych) {
           this.jsPsych = jsPsych;
       }
       trial(display_element, trial) {
-          // display stimulus
-          var html = '<div id="jspsych-connector-stimulus">Clue: ' + trial.stimulus + "</div><br>";
+          // randomization function
+          const shuffle = (array) => {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                const temp = array[i];
+        
+                // Swap
+                array[i] = array[j];
+                array[j] = temp;
+            }
+            return array;
+        };
 
-          //button formatting
+          // randomize buttons
+          if(trial.randomize_buttons == true) {
+            shuffle(trial.choices);
+          };
+
+          // display stimulus
+          var html = '<div id="jspsych-connector-stimulus" style="font-size: 48px">Clue: ' + trial.stimulus + "</div><br>";
 
           //display buttons
           var buttons = [];
@@ -105,7 +121,13 @@ var jsPsychConnector = (function (jspsych) {
           for (var i = 0; i < trial.choices.length; i++) {
               var str = buttons[i].replace(/%choice%/g, trial.choices[i]);
               str = str.replace(/%num%/g, i);
+              if (i % 4 == 0) {
+                html += '<button class="filler"></button>'
+              }
               html += str;
+              if (i % 4 == 3) {
+                html += '<button class="filler"></button>'
+              }
           }
 
           html += "</div><br>";
@@ -116,15 +138,16 @@ var jsPsychConnector = (function (jspsych) {
           }
 
           //display "finish" button
-          html += '<button class="connector-button disabled" id="finish_button" disabled="disabled">Finish</button>'
+          html += '<button class="finish-button disabled" id="finish_button" disabled="disabled">Enter responses</button>'
           
           display_element.innerHTML = html;
           
-          //set up array to keep track of button clicks
+          //set up arrays to keep track of button clicks
           var buttons_clicked = [];
           for (var i = 0; i < trial.choices.length; i++) {
             buttons_clicked.push(0);
           }
+          var clicks = [];
 
           // start time
           var start_time = performance.now();
@@ -153,21 +176,39 @@ var jsPsychConnector = (function (jspsych) {
           const end_trial = () => {
               // kill any remaining setTimeout handlers
               this.jsPsych.pluginAPI.clearAllTimeouts();
-              // gather the data to store for the trial
+              // get RT
               var end_time = performance.now();
               var rt = Math.round(end_time - start_time);
               response.rt = rt;
+              // get the final responses
               var responses = [];
               for (var i = 0; i < trial.choices.length; i++) {
                 if(buttons_clicked[i] == 1){
                     responses.push(trial.choices[i])
                 }
               }
+              // get all responses made (in order)
+              var words_clicked = [];
+              for (var i = 0; i < clicks.length; i++) {
+                for (var j = 0; j < trial.choices.length; j++) {
+                    if(clicks[i] == j) {
+                        words_clicked.push(trial.choices[j])
+                    }
+                }
+              }
+              // put the final responses in order
+              var ordered_responses = []
+              for (var i = 0; i < words_clicked.length; i++) {
+                if (responses.includes(words_clicked[i])) {
+                    ordered_responses.push(words_clicked[i])
+                }
+              }
               
               var trial_data = {
                   rt: response.rt,
                   stimulus: trial.stimulus,
-                  response: responses,
+                  response: ordered_responses,
+                  all_responses: words_clicked,
               };
               // clear the display
               display_element.innerHTML = "";
@@ -177,13 +218,17 @@ var jsPsychConnector = (function (jspsych) {
 
           // function to handle responses by the subject
           function after_response(choice) {
+            //store the clicked button
+            if (clicks.includes(choice)) {}
+            else {
+                clicks.push(choice);
+            }
+
             //update button selection
-            console.log(choice);
             buttons_clicked[choice] = buttons_clicked[choice]*(-1)+1;
             console.log(buttons_clicked);
 
             //update the clicked button
-            
             if(buttons_clicked[choice] == 1) {
                 document.getElementById("board-button-" + choice).className = "connector-button selected";
             }
@@ -191,22 +236,14 @@ var jsPsychConnector = (function (jspsych) {
                 document.getElementById("board-button-" + choice).className = "connector-button";
             }
 
-            // var btns = document.querySelectorAll(".board-button");
-            // if (buttons_clicked[choice] == 1){
-            //     btns[choice].className = "connector-button selected";
-            // }
-            // else {
-            //     btns[choice].className = "connector-button";
-            // }
-
             //update finish button 
             if(buttons_clicked.reduce((a,b) => {return a+b}) == trial.num_buttons){
                 document.getElementById("finish_button").removeAttribute("disabled");
-                document.getElementById("finish_button").className = "connector-button";
+                document.getElementById("finish_button").className = "finish-button enabled";
             }
             else {
                 document.getElementById("finish_button").setAttribute("disabled", "disabled");
-                document.getElementById("finish_button").className = "connector-button disabled";
+                document.getElementById("finish_button").className = "finish-button disabled";
             }
           }
 

@@ -6,6 +6,7 @@
         <link href="jspsych/jspsych.css" rel="stylesheet" type="text/css" />
         <script src="jspsych/plugin-connector.js"></script>
         <script src="stimuli.js"></script>
+        <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.2"></script>
         <style>
             .connector-button{
                 background-color: gray;
@@ -17,16 +18,47 @@
                 text-decoration: none;
                 display: inline-block;
                 font-size: 16px;
-                margin: 5px 1%;
+                margin: 5px 0.5%;
                 cursor: pointer;
-                width: 22%;
+                width: 15%;
+            }
+            .filler{
+                background-color: white;
+                border: none;
+                border-radius: 10px;
+                color: white;
+                padding: 15px 32px;
+                text-align: center;
+                text-decoration: none;
+                display: inline-block;
+                font-size: 16px;
+                margin: 5px 0.5%;
+                cursor: default;
+                width: 15%;
             }
             .disabled {
-                opacity: 0.5;
+                opacity: 0.25;
                 cursor: not-allowed;
+            }
+            .enabled {
+                opacity: 1;
+                cursor: pointer;
             }
             .selected {
                 background-color: green;
+            }
+            .finish-button{
+                background-color: blue;
+                border: none;
+                border-radius: 10px;
+                color: white;
+                padding: 15px 32px;
+                text-align: center;
+                text-decoration: none;
+                display: inline-block;
+                font-size: 16px;
+                margin: 5px 1%;
+                width: 15%;
             }
         </style>
     </head>
@@ -43,11 +75,24 @@
             stimulus: jsPsych.timelineVariable("clue"),
             choices: jsPsych.timelineVariable("board"),
             prompt: "Please select two words from the board",
-            num_buttons: 2
+            num_buttons: 2,
+            data: {
+                words: jsPsych.timelineVariable("words"),
+                clue: jsPsych.timelineVariable("clue"),
+                board: jsPsych.timelineVariable("board"),
+                pragmatics: jsPsych.timelineVariable("pragmatics"),
+                accessibility: jsPsych.timelineVariable("accessibility")
+            }
+        }
+        var fixation = {
+            type: jsPsychHtmlKeyboardResponse,
+            stimulus: "<p style='font-size: 48px;'>+</p>",
+            choices: "NO_KEYS",
+            trial_duration: 1000,
         }
 
         var experiment_procedure = {
-            timeline: [trial],
+            timeline: [trial, fixation],
             timeline_variables: stimuli,
             randomize_order: true
         }
