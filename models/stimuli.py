@@ -47,7 +47,7 @@ class boards:
       # once we have the indices, we need to convert to words
       words = [[list(vocab.Word)[i], list(vocab.Word)[j]] for i, j in wordpair_indices]
       df = pd.DataFrame(words, columns = ['Word1', 'Word2'])
-      df.to_csv('../data/targets.csv', index=False)
+      df.to_csv('../data/additional_targets.csv', index=False)
       return df
 
     
@@ -92,7 +92,7 @@ class boards:
         # also remove words that are targets or distractors
         targets = pd.read_csv('../data/targets.csv')
         targets = list(targets.Word1) + list(targets.Word2) + list(targets.distractor)
-        print("not in:", targets)
+        #print("not in:", targets)
         closest_words = [w for w in closest_words if w not in targets]
 
         # take random word from top 5-10
@@ -132,6 +132,18 @@ class boards:
         
         with open('../data/boards.json', 'w') as f:
             json.dump(final_boards, f)   
+      
+    def boardjson_to_csv(path):
+      '''
+      takes in a path for boards.json and converts it to a pandas dataframe
+      '''
+      df = pd.read_json(path).T
+      df.reset_index(inplace=True)
+
+      df['board'] = df[df.columns[1:20]].apply(lambda x: ', '.join(x), axis = 1).to_list()
+      df["newboard"] = (df["board"].str.replace('"', "").apply(lambda x: ", ".join(f"'{word}'" for word in x.split(", "))))
+      df[['index', 'newboard']].to_csv('../data/boards.csv', index=False)
+    
 
 class RSA:
 
@@ -446,20 +458,16 @@ class SWOW:
       final_df["edit_w1"] = [edit_distance(w, w1) for w in list(final_df["word"])]
       final_df["edit_w2"] = [edit_distance(w, w2) for w in list(final_df["word"])]
       final_df = final_df[(final_df['edit_w1'] > 3) & (final_df['edit_w2']> 3)]
-      final_df.to_csv("../data/final_df_1.csv", index= False)
+      #final_df.to_csv("../data/final_df_1.csv", index= False)
       # exclude clues that are too long or short or contain special characters
       list_of_words = list(final_df.word)
 
       list_of_words = [w for w in list_of_words if (len(w) < 15) & (len(w) > 2) & (' ' not in w) & (w[0].islower()) & (w.isalpha()) & (w1 not in w) & (w2 not in w) & (w not in w1) & (w not in w2) & (w not in distractor) & (distractor not in w)]
 
       final_df = final_df[final_df['word'].isin(list_of_words)]
-      final_df.to_csv("../data/final_df.csv", index= False)
+      #final_df.to_csv("../data/final_df.csv", index= False)
 
       final_df = final_df.reset_index()
-
-      
-
-      #print(final_df)
      
       clues_df = pd.DataFrame({'wordpair': [wordpair]})
       clues_df["high_a_high_p"] = final_df.loc[final_df['product'].idxmax()]["word"]

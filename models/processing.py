@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from stimuli import *
 
+# boards.boardjson_to_csv('../data/boards.json')
 vocab = pd.read_csv("../data/vocab.csv")
 
 embeddings = pd.read_csv("../data/swow_associative_embeddings.csv").transpose().values
@@ -24,7 +25,7 @@ embeddings = pd.read_csv("../data/swow_associative_embeddings.csv").transpose().
 
 with open('../data/boards.json') as json_file:
     final_boards = json.load(json_file)
-
+# print(final_boards)
 # wp = "debit-check"
 # combs = RSA.compute_board_combos(wp, final_boards)
 # wp_index = list(combs.wordpair).index(wp)
