@@ -2,10 +2,10 @@ import pandas as pd
 import numpy as np
 from stimuli import *
 
-# boards.boardjson_to_csv('../data/boards.json')
-vocab = pd.read_csv("../data/vocab.csv")
+boards.boardjson_to_csv('../data/boards.json')
+# vocab = pd.read_csv("../data/vocab.csv")
 
-embeddings = pd.read_csv("../data/swow_associative_embeddings.csv").transpose().values
+# embeddings = pd.read_csv("../data/swow_associative_embeddings.csv").transpose().values
 #reduces the vocab to exclude short words, words with spaces, and capitalized words
 # new_vocab, new_embeddings = boards.reduce_vocab_embeddings(vocab, embeddings)
 # print("new vocab length=",len(new_vocab))
@@ -23,8 +23,8 @@ embeddings = pd.read_csv("../data/swow_associative_embeddings.csv").transpose().
 # boards.create_final_board('../data', new_embeddings, new_vocab, 17)
 # print("boards created!")
 
-with open('../data/boards.json') as json_file:
-    final_boards = json.load(json_file)
+# with open('../data/boards.json') as json_file:
+#     final_boards = json.load(json_file)
 # print(final_boards)
 # wp = "debit-check"
 # combs = RSA.compute_board_combos(wp, final_boards)
@@ -42,9 +42,9 @@ with open('../data/boards.json') as json_file:
 
 
 ### RANDOM WALK CODE ###
-swow = SWOW('../data')
+# swow = SWOW('../data')
 
-swow.get_final_clues(vocab, embeddings, final_boards, walk_steps = 8)
+# swow.get_final_clues(vocab, embeddings, final_boards, walk_steps = 8)
 
 # ## note that word1 and word2 MUST be in targets.csv for the code below to run
 # word1 = "debit"

@@ -140,9 +140,9 @@ class boards:
       df = pd.read_json(path).T
       df.reset_index(inplace=True)
 
-      df['board'] = df[df.columns[1:20]].apply(lambda x: ', '.join(x), axis = 1).to_list()
+      df['board'] = df[df.columns[1:21]].apply(lambda x: ', '.join(x), axis = 1).to_list()
       df["newboard"] = (df["board"].str.replace('"', "").apply(lambda x: ", ".join(f"'{word}'" for word in x.split(", "))))
-      df[['index', 'newboard']].to_csv('../data/boards.csv', index=False)
+      df[['index', 'newboard']].to_csv('../data/newboards.csv', index=False)
     
 
 class RSA:
