@@ -157,7 +157,7 @@ var jsPsychConnector = (function (jspsych) {
           }
 
           //display "finish" button
-          html += '<button class="finish-button disabled" id="finish_button" disabled="disabled">Enter responses</button>'
+          html += '<button class="finish-button disabled" id="finish_button" disabled="disabled">Enter Responses</button>'
           
           display_element.innerHTML = html;
           
