@@ -23,6 +23,12 @@ var jsPsychConnector = (function (jspsych) {
             pretty_name: "Number of Buttons",
             default: 2,
           },
+          /** The number of buttons per row in the board */
+          row_length: {
+            type: jspsych.ParameterType.INT,
+            pretty_name: "Row Length",
+            default: 4,
+          },
           /** The HTML for creating button. Can create own style. Use the "%choice%" string to indicate where the label from the choices parameter should be inserted. */
           button_html: {
               type: jspsych.ParameterType.HTML_STRING,
@@ -98,6 +104,11 @@ var jsPsychConnector = (function (jspsych) {
             shuffle(trial.choices);
           };
 
+          // convert words to all caps
+          for (var i = 0; i < trial.choices.length; i++) {
+            trial.choices[i] = trial.choices[i].toUpperCase();
+          }
+
           // display stimulus
           var html = '<div id="jspsych-connector-stimulus" style="font-size: 48px">Clue: ' + trial.stimulus + "</div><br>";
 
@@ -116,21 +127,29 @@ var jsPsychConnector = (function (jspsych) {
                   buttons.push(trial.button_html);
               }
           }
-          html += '<div id="board-button-group">';
-
+          
+          // fix the width of jsPsych-content <div>
+          document.getElementById("jspsych-content").style.width = "100%";
+          
+          // make each of the buttons and add line breaks
           for (var i = 0; i < trial.choices.length; i++) {
               var str = buttons[i].replace(/%choice%/g, trial.choices[i]);
               str = str.replace(/%num%/g, i);
-              if (i % 4 == 0) {
-                html += '<button class="filler"></button>'
-              }
               html += str;
-              if (i % 4 == 3) {
-                html += '<button class="filler"></button>'
+              if (i % trial.row_length == trial.row_length-1) {
+                html += '<br>'
               }
           }
 
-          html += "</div><br>";
+          // insert additional break if needed
+          if(trial.choices.length % trial.row_length == 0) {
+
+          }
+          else {
+            html += '<br>'
+          }
+
+          html += "<br>";
 
           //show prompt if there is one
           if (trial.prompt !== null) {
