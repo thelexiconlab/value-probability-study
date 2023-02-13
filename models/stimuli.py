@@ -19,37 +19,157 @@ from nltk import edit_distance
 
 class boards:
 
+    '''
+    main restrictions for ALL words
+      (1) excluding any compound words
+      (2) excluding words with length < 2 or >15
+      (3) excluding words that are capitalized, or have non-alphabetical characters in them
+      (4) excluding taboo words
+    
+    additional restrictions for distractors
+      (1) remove w1 and w2 
+      (2) remove words that have w1 or w2 in them (e.g., ground vs. underground)
+      (3) remove words that are within edit distance of 3 or less from the targets
+      (4) remove words that are already targets or distractors
+    
+    additional restrictions for clues
+      (1) exclude distractors
+      (2) exclude any clues that are within short edit distances of the distractors
+      (3) exclude any clues that are words on any of the boards
+      
+    '''
+
     def reduce_vocab_embeddings(vocab, embeddings):
       '''
-      applying some corrections:
+      applying some corrections for ALL words/vocab:
       (1) excluding any compound words
       (2) excluding words with length < 2 or >12
       (3) excluding words that are capitalized
+      (4) excluding taboo words
       '''
 
       all_words = list(vocab.Word)
 
       main_words = [w for w in all_words if (len(w) < 15) & (len(w) > 2) & (' ' not in w) & (w[0].islower()) & (w.isalpha())]
+      taboo_words = pd.read_csv("../data/taboo.csv").word_list.values
+      
+      main_words = [w for w in main_words if w not in taboo_words]
       #print(set(all_words) ^ set(main_words))
 
       main_word_indices = [all_words.index(w) for w in main_words]
       new_vocab = vocab.loc[main_word_indices]
       new_embeddings = embeddings[main_word_indices]
       return new_vocab, new_embeddings
+    
+    def exclusions_for_distractors_clues(w1, w2, initial_list):
+      #print(f"for {w1} and {w2}, and list of {len(initial_list)} ")
+
+      # remove w1 and w2 from initial_list
+      final_list = [w for w in initial_list if w not in [w1,w2]]
+      #print(f"reduced to {len(final_list)}")
+      # also remove words that have w1 or w2 in them (e.g., ground vs. underground)
+      final_list = [w for w in final_list if (w1 not in [w]) & (w2 not in [w]) & (w not in [w1]) & (w not in [w2])]
+      # also remove words that are within edit distance of 3 or less from the targets
+      final_list = [w for w in final_list if (edit_distance(w1,w)>3) & (edit_distance(w2,w)>3)]
+      # also remove words that are targets or distractors
+      targets = pd.read_csv('../data/targets.csv')
+      targets = list(targets.Word1) + list(targets.Word2) + list(targets.distractor)
+      #print("not in:", targets)
+      final_list = [w for w in final_list if w not in targets]
+      
+      return final_list
+    
+    def exclusions_for_clues(w1, w2, candidate_list):
+
+      print("size before exclusions is=", len(candidate_list))
+
+      # remove w1 and w2 from initial_list
+      final_list = [w for w in candidate_list if w not in [w1,w2]]
+      print("size after excluding w1w2 is=", len(final_list))
+      #print(f"reduced to {len(final_list)}")
+      # also remove words that have w1 or w2 in them (e.g., ground vs. underground)
+      final_list = [w for w in final_list if (w1 not in [w]) & (w2 not in [w]) & (w not in [w1]) & (w not in [w2])]
+      print("size after excluding subwords of w1w2=", len(final_list))
+      # also remove words that are within edit distance of 3 or less from the targets
+      final_list = [w for w in final_list if (edit_distance(w1,w)>3) & (edit_distance(w2,w)>3)]
+      print("size after excluding edit dist w1w2=", len(final_list))
+      # also remove words that are targets or distractors
+      targets = pd.read_csv('../data/targets.csv')
+      targets = list(targets.Word1) + list(targets.Word2) + list(targets.distractor)
+      #print("not in:", targets)
+      final_list = [w for w in final_list if w not in targets]
+      print("size after excluding other targets and distractors=", len(final_list))
+
+      ## remove taboo words + extra long words
+
+      main_words = [w for w in final_list if (len(w) < 15) & (len(w) > 2) & (' ' not in w) & (w[0].islower()) & (w.isalpha())]
+      taboo_words = pd.read_csv("../data/taboo.csv").word_list.values
+      
+      main_words = [w for w in main_words if w not in taboo_words]
+      print("size after excluding taboo=", len(main_words))
+
+      ## need asome additional exclusions where board words are also not included
+
+      with open('../data/boards.json') as json_file:
+        final_boards = json.load(json_file)
+      
+      blist = final_boards.values()
+      board_words = list(itertools.chain(*blist))
+
+      reduced_words = [w for w in main_words if w not in board_words]
+
+      print("size after excluding board=", len(reduced_words))
+      return reduced_words
+    
+    def exclusions_for_wordpairs(wordpair_list):
+      '''
+      wordpair_list is a list of lists [[w1,w2], [w1,w2]]
+      '''
+      target_df = pd.read_csv("../data/targets.csv")
+      for index,row in target_df.iterrows():
+        w1 = row["Word1"]
+        w2 = row["Word2"]
+        # remove w1 and w2 from initial_list
+        final_list = [w for w in wordpair_list if w not in [w1,w2]]
+        # also remove word pairs that have w1 or w2 in them (e.g., ground vs. underground)
+        final_list = [[i,j] for i,j in final_list if (w1 not in [i]) & (w2 not in [i]) & (i not in [w1]) & (i not in [w2]) & (w1 not in [j]) & (w2 not in [j]) & (j not in [w1]) & (j not in [w2])]
+        # also remove word pairs that are within edit distance of 3 or less from the targets
+        final_list = [[i,j] for i, j in final_list if (edit_distance(w1,i)>3) & (edit_distance(w2,i)>3) & (edit_distance(w1,j)>3) & (edit_distance(w2,j)>3)]
+        # also remove words that are targets or distractors
+        targets = list(target_df.Word1) + list(target_df.Word2) + list(target_df.distractor)
+        final_list = [[i,j] for i,j in final_list if (i not in targets) & (j not in targets) ]
+      
+      return final_list  
 
     def select_wordpairs(vocab, embeddings, similarity_threshold, n):
       # first compute similarity matrix
       sim_matrix = 1 - scipy.spatial.distance.cdist(embeddings, embeddings, 'cosine')
-      # find all indices where similarity is > threshold and less than 0.99
+      # find all indices where similarity is > threshold and less than 0.90 
       greater = np.argwhere((sim_matrix > similarity_threshold) & (sim_matrix < 0.90)).tolist()
       # random sample of list
-      wordpair_indices = random.sample(greater, n)
+      wordpair_indices = random.sample(greater, n+200)
       # once we have the indices, we need to convert to words
       words = [[list(vocab.Word)[i], list(vocab.Word)[j]] for i, j in wordpair_indices]
-      df = pd.DataFrame(words, columns = ['Word1', 'Word2'])
-      df.to_csv('../data/additional_targets.csv', index=False)
-      return df
-
+      
+      # reduce this to our acceptable word list 
+      print(f"original {len(words)}")
+      
+      targets = pd.read_csv('../data/targets.csv')
+      current_n = len(targets)
+      while(current_n <= n):
+        final_list = boards.exclusions_for_wordpairs(words)
+        print(f"reduced to {len(final_list)}")
+        print(f"sampling the {current_n}+1 th item")
+        final_words = random.sample(final_list, 1)
+        df = pd.DataFrame(final_words, columns = ['Word1', 'Word2'])
+        
+        new_target_df = pd.read_csv("../data/targets.csv")
+        final_target_df = pd.concat([new_target_df, df])
+        final_target_df.to_csv('../data/targets.csv', index=False)
+        
+        targets = pd.read_csv('../data/targets.csv')
+        current_n = len(targets)
+        
     
     def compute_similarity(word1, word2, vocab, embeddings):
       '''
@@ -63,14 +183,21 @@ class boards:
       print(f"similarity between {word1} and {word2}=", similarity)
       return similarity
 
-    def generate_random_board(words,n):
+    def generate_random_board(words,n, board_words):
         '''
-        given a list of words, generates a random sample of n words
+        given a list of words, generates a random sample of n words, excluding the words that are already in board_words
         '''
-        board_sample = random.sample(words, n)
+        flattened_board_words = list(itertools.chain(*board_words))
+        # print("len flattened =",len(flattened_board_words))
+        # print("flattened_board_words=",flattened_board_words)
+        
+        reduced_words = list(set(words) - set(flattened_board_words))
+        #print("reduced board candidates=", len(reduced_words))
+        
+        board_sample = random.sample(reduced_words, n)
         return board_sample
 
-    def generate_distractor(w1, w2, embeddings, vocabulary, distance):
+    def generate_distractor(w1, w2, embeddings, vocabulary, distance, board_words):
         '''
         given 2 words, generates a close distractor based on underlying semantic embeddings using midpoint 
         '''
@@ -83,24 +210,19 @@ class boards:
         y = np.array(similarities)
         y_sorted = np.argsort(-y).flatten() ## gives sorted indices
         closest_words = [list(vocabulary.Word)[i] for i in y_sorted]
-        # remove w1 and w2 from closest words
-        closest_words = [w for w in closest_words if w not in [w1,w2]]
-        # also remove words that have w1 or w2 in them (e.g., ground vs. underground)
-        closest_words = [w for w in closest_words if (w1 not in w) & (w2 not in w) & (w not in w1) & (w not in w2)]
-        # also remove words that are within edit distance of 3 or less from the targets
-        closest_words = [w for w in closest_words if (edit_distance(w1,w)>3) & (edit_distance(w2,w)>3)]
-        # also remove words that are targets or distractors
-        targets = pd.read_csv('../data/targets.csv')
-        targets = list(targets.Word1) + list(targets.Word2) + list(targets.distractor)
-        #print("not in:", targets)
-        closest_words = [w for w in closest_words if w not in targets]
+        
+        final_list = boards.exclusions_for_distractors_clues(w1, w2, closest_words)
 
+        # board words that are already chosen also need to be excluded
+
+        final_list = [w for w in final_list if w not in board_words]
+        
         # take random word from top 5-10
-        distractor = random.sample(closest_words[distance:distance+10], 1)
+        distractor = random.sample(final_list[distance:distance+10], 1)
 
         ## also return all other words that are NOT close
 
-        far_words = closest_words[1000:]
+        far_words = final_list[1000:]
         return distractor, far_words
     
     def create_final_board(data_path, embeddings, vocab, n):
@@ -112,7 +234,9 @@ class boards:
         final_target_df = pd.DataFrame()
         target_df = pd.read_csv(f"{data_path}/targets.csv".format())
         target_df["wordpair"]= target_df["Word1"]+ "-"+target_df["Word2"]
+        all_words = list(target_df.Word1) + list(target_df.Word2)
         final_boards = {}
+        # keeps track of which words have been used already and excludes those from future boards
 
         for index, row in target_df.iterrows():
             w1 = row["Word1"]
@@ -121,14 +245,24 @@ class boards:
 
             new_target_df = pd.DataFrame({ 'Word1':[w1] , 'Word2': [w2] ,'wordpair': [wordpair]})
             
-            distractor, far_words = boards.generate_distractor(w1, w2, embeddings, vocab, 50)
+            distractor, far_words = boards.generate_distractor(w1, w2, embeddings, vocab, 50, all_words)
             new_target_df["distractor"] = distractor
             final_target_df = pd.concat([final_target_df, new_target_df])
-            final_target_df.to_csv('../data/targets_and_distractors.csv', index=False)
+            final_target_df.to_csv('../data/targets.csv', index=False)
             print(f"distractor for {wordpair} is {distractor}")
 
-            b = boards.generate_random_board(far_words, n)
-            final_boards[wordpair] = b + distractor + [w1,w2]
+            # print("far words length=", len(far_words))
+            
+            # print("all_words=",all_words)
+            
+            b = boards.generate_random_board(far_words, n, [all_words + distractor]) 
+            
+            twenty = b + distractor + [w1,w2]
+              
+            all_words = all_words + twenty
+        
+            final_boards[wordpair] = twenty
+            print("board is=", twenty)
         
         with open('../data/boards.json', 'w') as f:
             json.dump(final_boards, f)   
@@ -142,7 +276,7 @@ class boards:
 
       df['board'] = df[df.columns[1:21]].apply(lambda x: ', '.join(x), axis = 1).to_list()
       df["newboard"] = (df["board"].str.replace('"', "").apply(lambda x: ", ".join(f"'{word}'" for word in x.split(", "))))
-      df[['index', 'newboard']].to_csv('../data/newboards.csv', index=False)
+      df[['index', 'newboard']].to_csv('../data/boards.csv', index=False)
     
 
 class RSA:
@@ -421,14 +555,19 @@ class SWOW:
     and then identifies the 4 clues
     '''
     # Loop through word pairs
+    #final_clues_df = pd.read_csv("../data/clues.csv")
+
     final_clues_df = pd.DataFrame()
+
+    #current_clues = list(pd.read_csv("../data/current_clues.csv").current_clues)
+    current_clues = pd.DataFrame()
 
     for index, row in self.target_df.iterrows():
       w1 = row['Word1']
       w2 = row['Word2']
       distractor = row['distractor']
       wordpair = w1 + "-" + w2
-      print(wordpair)
+      print("******" ,wordpair, "******")
       # compute a df of visit counts
       union_counts_df = self.union_candidates(row["Word1"], row["Word2"], walk_steps, vocab) 
       print("visit counts complete")
@@ -450,37 +589,62 @@ class SWOW:
       final_df["product"] = final_df["visit_count"]*final_df["pragmatic_score"]
       final_df = final_df.sort_values(by="product", ascending = False)
 
-      # exclude the words themselves and distractor from this list
-      w1w2 = [w1, w2,distractor]
-      final_df = final_df[~final_df['word'].isin(w1w2)]
-      
-      # exclude any clues that are within short edit distances of the targets
-      final_df["edit_w1"] = [edit_distance(w, w1) for w in list(final_df["word"])]
-      final_df["edit_w2"] = [edit_distance(w, w2) for w in list(final_df["word"])]
-      final_df = final_df[(final_df['edit_w1'] > 3) & (final_df['edit_w2']> 3)]
-      #final_df.to_csv("../data/final_df_1.csv", index= False)
-      # exclude clues that are too long or short or contain special characters
-      list_of_words = list(final_df.word)
+      ## apply exclusions to this set 
+      words = list(final_df.word)
 
-      list_of_words = [w for w in list_of_words if (len(w) < 15) & (len(w) > 2) & (' ' not in w) & (w[0].islower()) & (w.isalpha()) & (w1 not in w) & (w2 not in w) & (w not in w1) & (w not in w2) & (w not in distractor) & (distractor not in w)]
+      reduced_words = boards.exclusions_for_clues(w1, w2, words)
 
-      final_df = final_df[final_df['word'].isin(list_of_words)]
-      #final_df.to_csv("../data/final_df.csv", index= False)
+      print("exclusions complete!")
+
+ 
+
+      final_df = final_df[final_df['word'].isin(reduced_words)]
+
+      # exclude current clues
+
+      final_df = final_df[~final_df['word'].isin(current_clues)]
 
       final_df = final_df.reset_index()
+      final_df.to_csv("../data/final_df.csv", index=False)
+
+      #final_df = pd.read_csv("../data/final_df.csv")
+      #final_df = final_df[~final_df['word'].isin(current_clues)]
      
       clues_df = pd.DataFrame({'wordpair': [wordpair]})
-      clues_df["high_a_high_p"] = final_df.loc[final_df['product'].idxmax()]["word"]
-      
-      clues_df["high_a_low_p"] = list((final_df[(final_df["visit_count"]> 50) & (final_df["pragmatic_score"] < .0001)]).sample(n=1)["word"])[0]
-      clues_df["low_a_high_p"] = list((final_df[(final_df["visit_count"]< 50) & (final_df["pragmatic_score"] > .0001)]).sample(n=1)["word"])[0]
+      high_a_high_p = final_df.loc[final_df['product'].idxmax()]
 
-      top50 = final_df[:50]
-      clues_df["low_a_low_p"] = list((top50[(top50["visit_count"]< 50) & (top50["pragmatic_score"] < .0001)]).sample(n=1)["word"])[0]
+      high_a_low_p = final_df[(final_df["visit_count"]> 20) & (final_df["pragmatic_score"] < .0001)]
+      
+      low_a_high_p = final_df[(final_df["visit_count"]< 20) & (final_df["pragmatic_score"] > .0001)]
+      top100 = final_df[:100]
+      low_a_low_p = top100[(top100["visit_count"]< 20) & (top100["pragmatic_score"] < .0001)]
+      
+
+      current_clues = current_clues + [high_a_high_p["word"],list(high_a_low_p["word"])[0],list(low_a_high_p["word"])[0],list(low_a_low_p["word"])[0]]
+      print("current_clues=",current_clues)
+      #print("high_a_high_p=",high_a_high_p)
+      clues_df["high_a_high_p_clue"] = high_a_high_p["word"]
+      clues_df["high_a_high_p_visitcount"] = high_a_high_p["visit_count"]
+      clues_df["high_a_high_p_prag_score"] = high_a_high_p["pragmatic_score"]
+
+      #print("high_a_low_p=",high_a_low_p)
+      clues_df["high_a_low_p_clue"] = list(high_a_low_p["word"])[1]
+      clues_df["high_a_low_p_visitcount"] = list(high_a_low_p["visit_count"])[1]
+      clues_df["high_a_low_p_prag_score"] = list(high_a_low_p["pragmatic_score"])[1]
+
+      #print("low_a_high_p=",low_a_high_p)
+      clues_df["low_a_high_p_clue"] = list(low_a_high_p["word"])[0]
+      clues_df["low_a_high_p_visitcount"] = list(low_a_high_p["visit_count"])[0]
+      clues_df["low_a_high_p_prag_score"] = list(low_a_high_p["pragmatic_score"])[0]
+
+      #print("low_a_low_p=",low_a_low_p)
+      clues_df["low_a_low_p_clue"] = list(low_a_low_p["word"])[1]
+      clues_df["low_a_low_p_visitcount"] = list(low_a_low_p["visit_count"])[1]
+      clues_df["low_a_low_p_prag_score"] = list(low_a_low_p["pragmatic_score"])[1]
 
       final_clues_df = pd.concat([final_clues_df, clues_df])
       
-      final_clues_df.to_csv('../data/clues.csv', index=False)
-      print("merging complete")
+      final_clues_df.to_csv('../data/clues_new.csv', index=False)
+      print("clue selection complete")
 
 

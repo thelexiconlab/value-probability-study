@@ -2,17 +2,18 @@ import pandas as pd
 import numpy as np
 from stimuli import *
 
-boards.boardjson_to_csv('../data/boards.json')
-# vocab = pd.read_csv("../data/vocab.csv")
 
-# embeddings = pd.read_csv("../data/swow_associative_embeddings.csv").transpose().values
-#reduces the vocab to exclude short words, words with spaces, and capitalized words
+#boards.boardjson_to_csv('../data/boards.json')
+
+vocab = pd.read_csv("../data/vocab.csv")
+embeddings = pd.read_csv("../data/swow_associative_embeddings.csv").transpose().values
+# #reduces the vocab to exclude short words, words with spaces, and capitalized words
 # new_vocab, new_embeddings = boards.reduce_vocab_embeddings(vocab, embeddings)
 # print("new vocab length=",len(new_vocab))
 
 # random.seed(20)
 # saves targets to targets.csv inside the "data" folder
-# targets = boards.select_wordpairs(new_vocab, new_embeddings, 0.7, 1)
+#targets = boards.select_wordpairs(new_vocab, new_embeddings, 0.7, 64)
 # print("targets created!")
 
 # word1 = "cat"
@@ -20,11 +21,13 @@ boards.boardjson_to_csv('../data/boards.json')
 
 # boards.compute_similarity(word1, word2, vocab, embeddings)
 
-# boards.create_final_board('../data', new_embeddings, new_vocab, 17)
+#boards.create_final_board('../data', new_embeddings, new_vocab, 17)
 # print("boards created!")
 
-# with open('../data/boards.json') as json_file:
-#     final_boards = json.load(json_file)
+with open('../data/boards.json') as json_file:
+    final_boards = json.load(json_file)
+
+
 # print(final_boards)
 # wp = "debit-check"
 # combs = RSA.compute_board_combos(wp, final_boards)
@@ -42,9 +45,9 @@ boards.boardjson_to_csv('../data/boards.json')
 
 
 ### RANDOM WALK CODE ###
-# swow = SWOW('../data')
+swow = SWOW('../data')
 
-# swow.get_final_clues(vocab, embeddings, final_boards, walk_steps = 8)
+swow.get_final_clues(vocab, embeddings, final_boards, walk_steps = 8)
 
 # ## note that word1 and word2 MUST be in targets.csv for the code below to run
 # word1 = "debit"
