@@ -20,12 +20,23 @@ embeddings = pd.read_csv("../data/swow_associative_embeddings.csv").transpose().
 # word2 = "lion"
 
 # boards.compute_similarity(word1, word2, vocab, embeddings)
+# t = pd.read_csv("../data/targets.csv")
+# b = list(t.Word1) + list(t.Word2)
 
-#boards.create_final_board('../data', new_embeddings, new_vocab, 17)
-# print("boards created!")
 
 with open('../data/boards.json') as json_file:
     final_boards = json.load(json_file)
+
+# blist = final_boards.values()
+# board_words = list(itertools.chain(*blist))
+
+
+# x, y  = boards.generate_distractor('buyer', 'earner', new_embeddings, new_vocab,50, board_words)
+# print(x)
+#boards.create_final_board('../data', new_embeddings, new_vocab, 17)
+# print("boards created!")
+
+
 
 
 # print(final_boards)

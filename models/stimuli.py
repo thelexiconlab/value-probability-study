@@ -68,7 +68,7 @@ class boards:
       final_list = [w for w in initial_list if w not in [w1,w2]]
       #print(f"reduced to {len(final_list)}")
       # also remove words that have w1 or w2 in them (e.g., ground vs. underground)
-      final_list = [w for w in final_list if (w1 not in [w]) & (w2 not in [w]) & (w not in [w1]) & (w not in [w2])]
+      final_list = [w for w in final_list if (w1 not in w) & (w2 not in w) & (w not in w1) & (w not in w2)]
       # also remove words that are within edit distance of 3 or less from the targets
       final_list = [w for w in final_list if (edit_distance(w1,w)>3) & (edit_distance(w2,w)>3)]
       # also remove words that are targets or distractors
@@ -78,6 +78,39 @@ class boards:
       final_list = [w for w in final_list if w not in targets]
       
       return final_list
+
+    def exclude_current_clues(candidate_list, current_clues):
+      '''
+      excluding all clues and variants of those clues so far from the list
+      '''
+      after_subwords_list1 = []
+      subwords_list2 = []
+
+      if len(current_clues)>0:
+        final_list = [w for w in candidate_list if w not in current_clues]
+        print("size after excluding currentcclues is=", len(final_list))
+        
+        ## first look for final_list words in current_clues
+        ## this tests if a candidate like "bug" is in "bugs"
+        for w in final_list:
+          if not any(w in c for c in current_clues):
+            after_subwords_list1+= [w]
+        
+        # then look for current_clues in after_subwords_list1
+        ## this tests if a clue like "bug" is in a candidate like "bugs"
+        for w in after_subwords_list1:
+          if any(c in w for c in current_clues):
+            # if any of the current_clues are found as part of any of the words in after_subwords_list1
+            # add to a new list
+            subwords_list2+= [w]
+        
+        # now exclude subword_list2 from after_subwords_list1
+        after_subwords_list1 = [w for w in after_subwords_list1 if w not in subwords_list2]
+        print("size after excluding subwords of currentcclues is=", len(after_subwords_list1))
+        return after_subwords_list1
+      else:
+        print("current clues is empty, size of list=", len(candidate_list))
+        return candidate_list
     
     def exclusions_for_clues(w1, w2, candidate_list):
 
@@ -88,7 +121,7 @@ class boards:
       print("size after excluding w1w2 is=", len(final_list))
       #print(f"reduced to {len(final_list)}")
       # also remove words that have w1 or w2 in them (e.g., ground vs. underground)
-      final_list = [w for w in final_list if (w1 not in [w]) & (w2 not in [w]) & (w not in [w1]) & (w not in [w2])]
+      final_list = [w for w in final_list if (w1 not in w) & (w2 not in w) & (w not in w1) & (w not in w2)]
       print("size after excluding subwords of w1w2=", len(final_list))
       # also remove words that are within edit distance of 3 or less from the targets
       final_list = [w for w in final_list if (edit_distance(w1,w)>3) & (edit_distance(w2,w)>3)]
@@ -100,9 +133,32 @@ class boards:
       final_list = [w for w in final_list if w not in targets]
       print("size after excluding other targets and distractors=", len(final_list))
 
+      ## also remove subwords of distractors and targets?
+      after_subwords_list_1 = []
+      # first we look for whether any candidate word is a subword of targets/distractors
+      # this catches a candidate like "bug" if "bugs" is a target/distractor
+      # because we are testing if bug in bugs
+      for w in final_list:
+        if not any(w in c for c in targets):
+          after_subwords_list_1+= [w]
+
+      print("1: size after excluding subwords of targets and distractors=", len(after_subwords_list_1))
+
+      # next we want to look for whether any target/distractor is a subword of the remaining candidates
+      # this catches a distractor like "recipes" if "recipe" is a target/distractor
+      # because we are testing if recipe in recipes
+      subwords_list_2 = []
+      for c in after_subwords_list_1:
+        if any(w in c for w in targets ):
+          #print(f"found {c}, will need to exclude")
+          subwords_list_2+= [c]
+      
+      after_subwords_list_1 = [w for w in after_subwords_list_1 if w not in subwords_list_2]
+
+      print("2: size after excluding subwords of targets and distractors=", len(after_subwords_list_1))
       ## remove taboo words + extra long words
 
-      main_words = [w for w in final_list if (len(w) < 15) & (len(w) > 2) & (' ' not in w) & (w[0].islower()) & (w.isalpha())]
+      main_words = [w for w in after_subwords_list_1 if (len(w) < 15) & (len(w) > 2) & (' ' not in w) & (w[0].islower()) & (w.isalpha())]
       taboo_words = pd.read_csv("../data/taboo.csv").word_list.values
       
       main_words = [w for w in main_words if w not in taboo_words]
@@ -132,7 +188,7 @@ class boards:
         # remove w1 and w2 from initial_list
         final_list = [w for w in wordpair_list if w not in [w1,w2]]
         # also remove word pairs that have w1 or w2 in them (e.g., ground vs. underground)
-        final_list = [[i,j] for i,j in final_list if (w1 not in [i]) & (w2 not in [i]) & (i not in [w1]) & (i not in [w2]) & (w1 not in [j]) & (w2 not in [j]) & (j not in [w1]) & (j not in [w2])]
+        final_list = [[i,j] for i,j in final_list if (w1 not in i) & (w2 not in i) & (i not in w1) & (i not in w2) & (w1 not in j) & (w2 not in j) & (j not in w1) & (j not in w2)]
         # also remove word pairs that are within edit distance of 3 or less from the targets
         final_list = [[i,j] for i, j in final_list if (edit_distance(w1,i)>3) & (edit_distance(w2,i)>3) & (edit_distance(w1,j)>3) & (edit_distance(w2,j)>3)]
         # also remove words that are targets or distractors
@@ -560,9 +616,9 @@ class SWOW:
     final_clues_df = pd.DataFrame()
 
     #current_clues = list(pd.read_csv("../data/current_clues.csv").current_clues)
-    current_clues = pd.DataFrame()
+    current_clues = []
 
-    for index, row in self.target_df.iterrows():
+    for index, row in self.target_df[6:7].iterrows():
       w1 = row['Word1']
       w2 = row['Word2']
       distractor = row['distractor']
@@ -594,57 +650,83 @@ class SWOW:
 
       reduced_words = boards.exclusions_for_clues(w1, w2, words)
 
+      # exclude current clues ## we also want to exclude variants of current clues
+
+      final_candidates = boards.exclude_current_clues(reduced_words, current_clues)
+      
+
       print("exclusions complete!")
 
- 
-
-      final_df = final_df[final_df['word'].isin(reduced_words)]
-
-      # exclude current clues
-
-      final_df = final_df[~final_df['word'].isin(current_clues)]
+      final_df = final_df[final_df['word'].isin(final_candidates)]
 
       final_df = final_df.reset_index()
       final_df.to_csv("../data/final_df.csv", index=False)
 
-      #final_df = pd.read_csv("../data/final_df.csv")
-      #final_df = final_df[~final_df['word'].isin(current_clues)]
+      # final_df = pd.read_csv("../data/final_df.csv")
+      # final_df = final_df[~final_df['word'].isin(current_clues)]
+
+      # final_df = final_df[final_df['visit_count']!= 0]
      
-      clues_df = pd.DataFrame({'wordpair': [wordpair]})
-      high_a_high_p = final_df.loc[final_df['product'].idxmax()]
-
-      high_a_low_p = final_df[(final_df["visit_count"]> 20) & (final_df["pragmatic_score"] < .0001)]
+      # clues_df = pd.DataFrame({'wordpair': [wordpair], 'distractor': distractor})
       
-      low_a_high_p = final_df[(final_df["visit_count"]< 20) & (final_df["pragmatic_score"] > .0001)]
-      top100 = final_df[:100]
-      low_a_low_p = top100[(top100["visit_count"]< 20) & (top100["pragmatic_score"] < .0001)]
+      # # get mean and sd of accessibility
+      # threshold_a = final_df["visit_count"].mean() + final_df["visit_count"].std()
+      # print("threshold_a=",threshold_a)
+
+      # # get mean and sd of prag score
+      # threshold_p = final_df["pragmatic_score"].mean() + final_df["pragmatic_score"].std()
+      # print("threshold_p=",threshold_p)
       
+      # final_df["over_threshold_a_true"] = final_df["visit_count"] > threshold_a 
+      # final_df["over_threshold_p_true"] = final_df["pragmatic_score"] > threshold_p
 
-      current_clues = current_clues + [high_a_high_p["word"],list(high_a_low_p["word"])[0],list(low_a_high_p["word"])[0],list(low_a_low_p["word"])[0]]
-      print("current_clues=",current_clues)
-      #print("high_a_high_p=",high_a_high_p)
-      clues_df["high_a_high_p_clue"] = high_a_high_p["word"]
-      clues_df["high_a_high_p_visitcount"] = high_a_high_p["visit_count"]
-      clues_df["high_a_high_p_prag_score"] = high_a_high_p["pragmatic_score"]
+      # print("sorting by high visit count and high prag score")
+      # # but prioritize pragmatics!
+      # final_df = final_df.sort_values(by=['pragmatic_score'], ascending=False)
+      # high_a_high_p_df = final_df.loc[(final_df["over_threshold_a_true"]==True) & (final_df["over_threshold_p_true"]== True)]
+      # print(list(high_a_high_p_df["word"])[0])
 
-      #print("high_a_low_p=",high_a_low_p)
-      clues_df["high_a_low_p_clue"] = list(high_a_low_p["word"])[1]
-      clues_df["high_a_low_p_visitcount"] = list(high_a_low_p["visit_count"])[1]
-      clues_df["high_a_low_p_prag_score"] = list(high_a_low_p["pragmatic_score"])[1]
+      # print("sorting by high visit count and low prag score")
+      # final_df = final_df.sort_values(by=['visit_count'], ascending=False)
+      # high_a_low_p_df = final_df.loc[(final_df["over_threshold_a_true"]==True) & (final_df["over_threshold_p_true"]== False)]
+      # print(list(high_a_low_p_df["word"])[0])
 
-      #print("low_a_high_p=",low_a_high_p)
-      clues_df["low_a_high_p_clue"] = list(low_a_high_p["word"])[0]
-      clues_df["low_a_high_p_visitcount"] = list(low_a_high_p["visit_count"])[0]
-      clues_df["low_a_high_p_prag_score"] = list(low_a_high_p["pragmatic_score"])[0]
+      # print("sorting by high prag score and low visit count")
+      # final_df = final_df.sort_values(by=['pragmatic_score'], ascending=[False])
+      # low_a_high_p_df = final_df.loc[(final_df["over_threshold_a_true"]==False) & (final_df["over_threshold_p_true"]== True)]
+      # print(list(low_a_high_p_df["word"])[0])
 
-      #print("low_a_low_p=",low_a_low_p)
-      clues_df["low_a_low_p_clue"] = list(low_a_low_p["word"])[1]
-      clues_df["low_a_low_p_visitcount"] = list(low_a_low_p["visit_count"])[1]
-      clues_df["low_a_low_p_prag_score"] = list(low_a_low_p["pragmatic_score"])[1]
+      # # defining the low_a_low_p
+      # print("defining the low_a_low_p")
 
-      final_clues_df = pd.concat([final_clues_df, clues_df])
+      # low_a_low_p_df = final_df.loc[(final_df["over_threshold_a_true"]==False) & (final_df["over_threshold_p_true"]== False)]
+      # print(list(low_a_low_p_df["word"])[0])
+
+      # current_clues = current_clues + [list(high_a_high_p_df["word"])[0],list(high_a_low_p_df["word"])[0],list(low_a_high_p_df["word"])[0],list(low_a_low_p_df["word"])[0]]
+      # # print("current_clues=",current_clues)
+      # # #print("high_a_high_p=",high_a_high_p)
+      # clues_df["high_a_high_p_clue"] = list(high_a_high_p_df["word"])[0]
+      # clues_df["high_a_high_p_visitcount"] = list(high_a_high_p_df["visit_count"])[0]
+      # clues_df["high_a_high_p_prag_score"] = list(high_a_high_p_df["pragmatic_score"])[0]
+
+      # #print("high_a_low_p=",high_a_low_p)
+      # clues_df["high_a_low_p_clue"] = list(high_a_low_p_df["word"])[0]
+      # clues_df["high_a_low_p_visitcount"] = list(high_a_low_p_df["visit_count"])[0]
+      # clues_df["high_a_low_p_prag_score"] = list(high_a_low_p_df["pragmatic_score"])[0]
+
+      # #print("low_a_high_p=",low_a_high_p)
+      # clues_df["low_a_high_p_clue"] = list(low_a_high_p_df["word"])[0]
+      # clues_df["low_a_high_p_visitcount"] = list(low_a_high_p_df["visit_count"])[0]
+      # clues_df["low_a_high_p_prag_score"] = list(low_a_high_p_df["pragmatic_score"])[0]
+
+      # #print("low_a_low_p=",low_a_low_p)
+      # clues_df["low_a_low_p_clue"] = list(low_a_low_p_df["word"])[0]
+      # clues_df["low_a_low_p_visitcount"] = list(low_a_low_p_df["visit_count"])[0]
+      # clues_df["low_a_low_p_prag_score"] = list(low_a_low_p_df["pragmatic_score"])[0]
+
+      # final_clues_df = pd.concat([final_clues_df, clues_df])
       
-      final_clues_df.to_csv('../data/clues_new.csv', index=False)
-      print("clue selection complete")
+      # final_clues_df.to_csv('../data/clues_final.csv', index=False)
+      # print("clue selection complete")
 
 
