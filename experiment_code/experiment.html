@@ -8,7 +8,11 @@
         <script src="https://unpkg.com/@jspsych/plugin-survey-text@1.1.2"></script>
         <script src="https://unpkg.com/@jspsych/plugin-survey-multi-select@1.1.2"></script>
         <script src="https://unpkg.com/@jspsych/plugin-survey-multi-choice@1.1.2"></script>
-        <script src="stimuli.js"></script>
+        <script src="stimuli_1.js"></script>
+        <script src="stimuli_2.js"></script>
+        <script src="stimuli_3.js"></script>
+        <script src="stimuli_4.js"></script>
+        <script src="practice_stimuli.js"></script>
         <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.2"></script>
         <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.1.2"></script>
         <style>
@@ -73,8 +77,18 @@
                 }
             });
 
-        //tag with type of clue
-            var trial = {
+        var subject_id = Math.floor(Math.random()*100000)
+
+        // select the list
+        var list = [1, 2, 3, 4]
+        var CONDITION = list[Math.floor(Math.random()*list.length)];
+        var trial_list = []
+        if(CONDITION == 1){trial_list = list1}
+        else if(CONDITION == 2){trial_list = list2}
+        else if(CONDITION == 3){trial_list = list3}
+        else{trial_list = list4}
+
+        var trial = {
             type: jsPsychConnector,
             stimulus: jsPsych.timelineVariable("clue"),
             choices: jsPsych.timelineVariable("board"),
@@ -86,7 +100,9 @@
                 board: jsPsych.timelineVariable("board"),
                 pragmatics: jsPsych.timelineVariable("pragmatics"),
                 accessibility: jsPsych.timelineVariable("accessibility"),
-                trial_type: "trial"
+                subject: subject_id,
+                trial_type: "trial",
+                clue_type: jsPsych.timelineVariable("clue_type")
             }
         }
 
@@ -102,7 +118,9 @@
                 board: jsPsych.timelineVariable("board"),
                 pragmatics: jsPsych.timelineVariable("pragmatics"),
                 accessibility: jsPsych.timelineVariable("accessibility"),
-                type_of_trial: "practice"
+                subject: subject_id,
+                type_of_trial: "practice",
+                clue_type: jsPsych.timelineVariable("clue_type")
             }
         }
 
@@ -112,7 +130,8 @@
             choices: "NO_KEYS",
             trial_duration: 1000,
             data: {
-                type_of_trial: "fixation"
+                type_of_trial: "fixation",
+                subject: subject_id
             }
         }
 
@@ -122,7 +141,8 @@
             choices: ["Advance"],
             button_html: "<button class='advance_button'> %choice% </button>",
             data: {
-                type_of_trial: "instructions"
+                type_of_trial: "instructions",
+                subject: subject_id
             }
         }
 
@@ -132,7 +152,8 @@
             choices: ["Begin Practice Trials"],
             button_html: "<button class='advance_button'> %choice% </button>",
             data: {
-                type_of_trial: "instructions"
+                type_of_trial: "instructions",
+                subject: subject_id
             }
         }
 
@@ -142,7 +163,7 @@
 
         var practice_procedure = {
             timeline: [fixation, practice],
-            timeline_variables: stimuli,
+            timeline_variables: prac_list,
             randomize_order: true
         }
 
@@ -152,13 +173,14 @@
             choices: ["Begin Experimental Trials"],
             button_html: "<button class='advance_button'> %choice% </button>",
             data: {
-                type_of_trial: "move_to_experiment"
+                type_of_trial: "move_to_experiment",
+                subject: subject_id
             }
         }
         
         var experiment_procedure = {
             timeline: [fixation, trial],
-            timeline_variables: stimuli,
+            timeline_variables: trial_list,
             randomize_order: true
         }
 
@@ -166,11 +188,10 @@
             type: jsPsychSurveyText,
             questions: [{prompt: "What is your age?", required: false, name: "age"}, {prompt: "What is your gender?", required: false, name: "gender"}, {prompt: "How many years of formal education have you had? (Consider graduating high school to be 12 years)", required: false, name: "education"}],
             data: {
-                type_of_trial: "demographics"
+                type_of_trial: "demographics",
+                subject: subject_id
             }
         }
-
-        //tag demographics 
 
         var race = {
             type: jsPsychSurveyMultiSelect,
@@ -182,7 +203,8 @@
                 name: 'race'
             }],
             data: {
-                type_of_trial: "demographics"
+                type_of_trial: "demographics",
+                subject: subject_id
             }
         }
 
@@ -207,7 +229,8 @@
                 required: false
             }],
             data: {
-                type_of_trial: "demographics"
+                type_of_trial: "demographics",
+                subject: subject_id
             }
         }
 
@@ -215,7 +238,8 @@
             type: jsPsychSurveyText,
             questions: [{prompt: "Is there anything else we should know about that might have affected your performance during the experiment? (e.g., lack of sleep, feeling ill)", required: false, name: "anything_else"}],
             data: {
-                type_of_trial: "demographics"
+                type_of_trial: "demographics",
+                subject: subject_id
             }
         }
 
@@ -229,7 +253,8 @@
             choices: ["Finish and Save"],
             button_html: "<button class='advance_button'> %choice% </button>",
             data: {
-                type_of_trial: "debrief"
+                type_of_trial: "debrief",
+                subject: subject_id
             }
         }
 
