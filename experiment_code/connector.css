@@ -1,0 +1,51 @@
+.connector-button{
+    background-color: gray;
+    border: none;
+    border-radius: 10px;
+    color: white;
+    padding: 15px 32px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
+    margin: 5px 0.5%;
+    cursor: pointer;
+    width: 15%;
+}
+.advance_button{
+    background-color: gray;
+    border: none;
+    border-radius: 10px;
+    color: white;
+    padding: 15px 32px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
+    margin: 5px 0.5%;
+    cursor: pointer;
+}
+.disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
+}
+.enabled {
+    opacity: 1;
+    cursor: pointer;
+}
+.selected {
+    background-color: green;
+}
+.finish-button{
+    background-color: blue;
+    border: none;
+    border-radius: 10px;
+    color: white;
+    padding: 15px 32px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 16px;
+    margin: 5px 1%;
+    width: 15%;
+}
