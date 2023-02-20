@@ -108,6 +108,7 @@ var jsPsychConnector = (function (jspsych) {
           for (var i = 0; i < trial.choices.length; i++) {
             trial.choices[i] = trial.choices[i].toUpperCase();
           }
+          trial.stimulus = trial.stimulus.toUpperCase();
 
           // display stimulus
           var html = '<div id="jspsych-connector-stimulus" style="font-size: 48px">Clue: ' + trial.stimulus + "</div><br>";
@@ -231,6 +232,9 @@ var jsPsychConnector = (function (jspsych) {
               };
               // clear the display
               display_element.innerHTML = "";
+              //undo jspsych-content styling to not interfere with other trials
+              document.getElementById("jspsych-content").style.width = null;
+
               // move on to the next trial
               this.jsPsych.finishTrial(trial_data);
           };
@@ -245,7 +249,6 @@ var jsPsychConnector = (function (jspsych) {
 
             //update button selection
             buttons_clicked[choice] = buttons_clicked[choice]*(-1)+1;
-            console.log(buttons_clicked);
 
             //update the clicked button
             if(buttons_clicked[choice] == 1) {

@@ -5,8 +5,12 @@
         <script src="jspsych/jspsych.js"></script>
         <link href="jspsych/jspsych.css" rel="stylesheet" type="text/css" />
         <script src="jspsych/plugin-connector.js"></script>
+        <script src="https://unpkg.com/@jspsych/plugin-survey-text@1.1.2"></script>
+        <script src="https://unpkg.com/@jspsych/plugin-survey-multi-select@1.1.2"></script>
+        <script src="https://unpkg.com/@jspsych/plugin-survey-multi-choice@1.1.2"></script>
         <script src="stimuli.js"></script>
         <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.2"></script>
+        <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.1.2"></script>
         <style>
             .connector-button{
                 background-color: gray;
@@ -22,8 +26,8 @@
                 cursor: pointer;
                 width: 15%;
             }
-            .filler{
-                background-color: white;
+            .advance_button{
+                background-color: gray;
                 border: none;
                 border-radius: 10px;
                 color: white;
@@ -33,8 +37,7 @@
                 display: inline-block;
                 font-size: 16px;
                 margin: 5px 0.5%;
-                cursor: default;
-                width: 15%;
+                cursor: pointer;
             }
             .disabled {
                 opacity: 0.25;
@@ -70,7 +73,8 @@
                 }
             });
 
-        var trial = {
+        //tag with type of clue
+            var trial = {
             type: jsPsychConnector,
             stimulus: jsPsych.timelineVariable("clue"),
             choices: jsPsych.timelineVariable("board"),
@@ -81,7 +85,8 @@
                 clue: jsPsych.timelineVariable("clue"),
                 board: jsPsych.timelineVariable("board"),
                 pragmatics: jsPsych.timelineVariable("pragmatics"),
-                accessibility: jsPsych.timelineVariable("accessibility")
+                accessibility: jsPsych.timelineVariable("accessibility"),
+                trial_type: "trial"
             }
         }
 
@@ -96,7 +101,8 @@
                 clue: jsPsych.timelineVariable("clue"),
                 board: jsPsych.timelineVariable("board"),
                 pragmatics: jsPsych.timelineVariable("pragmatics"),
-                accessibility: jsPsych.timelineVariable("accessibility")
+                accessibility: jsPsych.timelineVariable("accessibility"),
+                type_of_trial: "practice"
             }
         }
 
@@ -105,12 +111,33 @@
             stimulus: "<p style='font-size: 48px;'>+</p>",
             choices: "NO_KEYS",
             trial_duration: 1000,
+            data: {
+                type_of_trial: "fixation"
+            }
+        }
+
+        var instructions_1 = {
+            type: jsPsychHtmlButtonResponse,
+            stimulus: "<p style='font-size: 20px; padding-right: 10%; padding-left: 10%'> Welcome to the Connector experiment, and thank you for choosing to participate! <br> <br> Please read the following instructions so that you know how to play the game: <br> <br> You will be shown a board of 20 words. In addition to the board, you will see a clue. You should think of this clue as coming from a friend or teammate, who is trying to indicate two of the words on the board without directly saying either of them. So, your goal is to interpret the clue and select the two words that you think are the most likely targets for that clue. </p>",
+            choices: ["Advance"],
+            button_html: "<button class='advance_button'> %choice% </button>",
+            data: {
+                type_of_trial: "instructions"
+            }
+        }
+
+        var instructions_2 = {
+            type: jsPsychHtmlButtonResponse,
+            stimulus: "<p style='font-size: 20px; padding-right: 10%; padding-left: 10%'> For example, consider the board below. Here, the clue is FOOD, and our player currently has FAMINE and CALORIE selected. <br> <br> <img src='example.png' style='border: 2px solid black'> <br> <br> When you are playing, simply click on words to select them. The words you click will turn green as a confirmation that they have been selected. If you accidentally click a word, or if you wish to change your choice, simply click a selected word to unselect it, and it will go back to gray. When exactly two words are selected, the Enter Responses button will illuminate. Once you are satisfied with your choices, click the Enter Responses button, and the experiment will automatically move to the next trial. <br> <br> To familiarize you with the game, there are four practice trials. As you play the game, be sure to attend to both speed and accuracy. In other words, make guesses that you think are likely to be correct, but don't linger too long on any one board. When you are ready, scroll down and click the button below to begin. <br> <br> There will be a pause between the practice trials and the experimental trials. </p>",
+            choices: ["Begin Practice Trials"],
+            button_html: "<button class='advance_button'> %choice% </button>",
+            data: {
+                type_of_trial: "instructions"
+            }
         }
 
         var instructions = {
-            type: jsPsychHtmlKeyboardResponse,
-            stimulus: "<p style='font-size: 20px; padding: 10%;'> Welcome to the Connector experiment, and thank you for choosing to participate! <br> <br> Please read the following instructions so that you know how to play the game: <br> <br> You will be shown a board of 20 words, like the example below. In addition to the board, you will see a clue. You should think of this clue as coming from a friend or teammate, who is trying to indicate two of the words on the board without directly saying either of them. So, your goal is to interpret the clue and select the two words that you think are the most likely targets for that clue. To select your words, simply click on them. When you click a word, it will turn green. This means the word is selected. If you accidentally click a word, or if you wish to change your choice, simply click a selected word to unselect it, and it will go back to gray. When exactly two words are selected, the Enter Responses button will illuminate. If you are satisfied with your choices, click the Enter Responses button, and the experiment will automatically move to the next trial. <br> <br> <img src='example.png' style='width: 70%'> <br> <br> To familiarize you with the game, there are four practice trials. When you are ready, please press the space bar to begin these trials. <br> <br> There will be a pause between the practice trials and the experimental trials. </p>",
-            choices: [" "],
+            timeline: [instructions_1, instructions_2]
         }
 
         var practice_procedure = {
@@ -120,9 +147,13 @@
         }
 
         var move_to_experiment = {
-            type: jsPsychHtmlKeyboardResponse,
-            stimulus: "<p style='font-size: 20px; padding: 10%'> This concludes the practice trials. <br> <br> When you are ready, please press the space bar, and the program will automatically move you through the 60 experimental trials.</p>",
-            choices: [" "]
+            type: jsPsychHtmlButtonResponse,
+            stimulus: "<p style='font-size: 20px; padding-right: 10%; padding-left: 10%'> This concludes the practice trials. <br> <br> When you are ready, please click the button below, and the experiment will automatically move you through the 60 experimental trials.</p>",
+            choices: ["Begin Experimental Trials"],
+            button_html: "<button class='advance_button'> %choice% </button>",
+            data: {
+                type_of_trial: "move_to_experiment"
+            }
         }
         
         var experiment_procedure = {
@@ -131,7 +162,78 @@
             randomize_order: true
         }
 
+        var age_gender_education = {
+            type: jsPsychSurveyText,
+            questions: [{prompt: "What is your age?", required: false, name: "age"}, {prompt: "What is your gender?", required: false, name: "gender"}, {prompt: "How many years of formal education have you had? (Consider graduating high school to be 12 years)", required: false, name: "education"}],
+            data: {
+                type_of_trial: "demographics"
+            }
+        }
+
+        //tag demographics 
+
+        var race = {
+            type: jsPsychSurveyMultiSelect,
+            questions: [{
+                prompt: "Please select all the racial categories that apply to you:", 
+                options: ["American Indian/Alaskan Native","Asian", "Black/African American", "Native Hawaiian or Other Pacific Islander" , "White/Caucasian", "More than once race", "Other"], 
+                horizontal: false,
+                required: false,
+                name: 'race'
+            }],
+            data: {
+                type_of_trial: "demographics"
+            }
+        }
+
+        var ethnicity = {
+            type: jsPsychSurveyMultiChoice,
+            questions: [{
+                prompt: "Are you of Hispanic, Latino/a/x or of Spanish origin?", 
+                name: 'ethnicity', 
+                options: ['Yes', 'No', 'Prefer not to respond'], 
+                required: false
+            }, 
+            {
+                prompt: "What is your dominant hand?", 
+                name: 'dominant_hand', 
+                options: ['Left', 'Right', 'Ambidexterous'], 
+                required: false
+            }, 
+            {
+                prompt: "Please indicate what time of the day you feel most alert:", 
+                name: 'alert', 
+                options: ['Morning', 'Afternoon', 'Evening', 'No Differences'], 
+                required: false
+            }],
+            data: {
+                type_of_trial: "demographics"
+            }
+        }
+
+        var anything_else = {
+            type: jsPsychSurveyText,
+            questions: [{prompt: "Is there anything else we should know about that might have affected your performance during the experiment? (e.g., lack of sleep, feeling ill)", required: false, name: "anything_else"}],
+            data: {
+                type_of_trial: "demographics"
+            }
+        }
+
+        var demographics = {
+            timeline: [age_gender_education, race, ethnicity, anything_else]
+        }
+
+        var debrief = {
+            type: jsPsychHtmlButtonResponse,
+            stimulus: "<p style='font-size: 20px; padding-right: 10%; padding-left: 10%'> This concludes the experiment. Thank you for your participation! <br> <br> If you want to learn more about this study, feel free to read this <a target='_blank' href='https://docs.google.com/document/d/1i8IoBbswSEUIXgkM1o68yRQSi3qYNkqx/edit?usp=sharing&ouid=101741936850660538660&rtpof=true&sd=true'>debrief<a> document, which explains the purpose and theory behind this research, and contains contact information for the experimenters. If this research interests you, feel free to explore our <a target='_blank' href='https://thelexiconlab.github.io/'>lab website</a> as well! <br> <br> IMPORTANT: Please return to this site and click 'Finish and Save' to save your data after reading. <br> <br> Thank you again!",
+            choices: ["Finish and Save"],
+            button_html: "<button class='advance_button'> %choice% </button>",
+            data: {
+                type_of_trial: "debrief"
+            }
+        }
+
         //run the code
-        jsPsych.run([instructions, practice_procedure, move_to_experiment, experiment_procedure]);
+        jsPsych.run([instructions, practice_procedure, move_to_experiment, experiment_procedure, demographics, debrief]);
     </script>
 </html>
