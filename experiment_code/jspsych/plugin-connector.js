@@ -17,6 +17,12 @@ var jsPsychConnector = (function (jspsych) {
               default: undefined,
               array: true,
           },
+          /** Array containing the label(s) for the button(s). */
+          answer: {
+            type: jspsych.ParameterType.STRING,
+            pretty_name: "Answer",
+            default: undefined
+          },
           /** The number of buttons required in a response */
           num_buttons: {
             type: jspsych.ParameterType.INT,
@@ -223,12 +229,22 @@ var jsPsychConnector = (function (jspsych) {
                     ordered_responses.push(words_clicked[i])
                 }
               }
-              
+
+              // handle accuracy
+              var accuracy = 0
+              var check = ordered_responses[0].toLowerCase() + "-" + ordered_responses[1].toLowerCase();
+              var check_flip = ordered_responses[1].toLowerCase() + "-" + ordered_responses[0].toLowerCase();
+              if(check == trial.answer || check_flip == trial.answer){
+                accuracy = 1
+              }
+
+              // collect data
               var trial_data = {
                   rt: response.rt,
                   stimulus: trial.stimulus,
                   response: ordered_responses,
                   all_responses: words_clicked,
+                  accuracy: accuracy
               };
               // clear the display
               display_element.innerHTML = "";

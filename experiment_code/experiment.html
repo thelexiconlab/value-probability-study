@@ -15,7 +15,6 @@
         <script src="practice_stimuli.js"></script>
         <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.2"></script>
         <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.1.2"></script>
-        <script src="connector.css"></script>
         <style>
             .connector-button{
                 background-color: gray;
@@ -95,6 +94,7 @@
             choices: jsPsych.timelineVariable("board"),
             prompt: "Please select two words from the board",
             num_buttons: 2,
+            answer: jsPsych.timelineVariable("words"),
             data: {
                 words: jsPsych.timelineVariable("words"),
                 clue: jsPsych.timelineVariable("clue"),
@@ -113,6 +113,7 @@
             choices: jsPsych.timelineVariable("board"),
             prompt: "Please select two words from the board",
             num_buttons: 2,
+            answer: jsPsych.timelineVariable("words"),
             data: {
                 words: jsPsych.timelineVariable("words"),
                 clue: jsPsych.timelineVariable("clue"),
