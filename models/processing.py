@@ -5,8 +5,8 @@ from stimuli import *
 
 #boards.boardjson_to_csv('../data/boards.json')
 
-vocab = pd.read_csv("../data/vocab.csv")
-embeddings = pd.read_csv("../data/swow_associative_embeddings.csv").transpose().values
+# vocab = pd.read_csv("../data/vocab.csv")
+# embeddings = pd.read_csv("../data/swow_associative_embeddings.csv").transpose().values
 # #reduces the vocab to exclude short words, words with spaces, and capitalized words
 # new_vocab, new_embeddings = boards.reduce_vocab_embeddings(vocab, embeddings)
 # print("new vocab length=",len(new_vocab))
@@ -24,8 +24,8 @@ embeddings = pd.read_csv("../data/swow_associative_embeddings.csv").transpose().
 # b = list(t.Word1) + list(t.Word2)
 
 
-with open('../data/boards.json') as json_file:
-    final_boards = json.load(json_file)
+# with open('../data/boards.json') as json_file:
+#     final_boards = json.load(json_file)
 
 # blist = final_boards.values()
 # board_words = list(itertools.chain(*blist))
@@ -40,11 +40,24 @@ with open('../data/boards.json') as json_file:
 
 
 # print(final_boards)
-# wp = "debit-check"
-# combs = RSA.compute_board_combos(wp, final_boards)
-# wp_index = list(combs.wordpair).index(wp)
+rsa = RSA()
+rsa.get_guess_scores(beta = 1)
+
+# wp = "flavorful-ingredients"
+# combs = rsa.compute_board_combos(wp, final_boards)
+# wordpairs_in_order = list(combs.wordpair)
+# #wp_index = list(combs.wordpair).index(wp)
+# bm = RSA.create_all_boards_matrices(embeddings, list(vocab.Word), vocab, final_boards)
+
+# x = rsa.literal_guesser('flavorful-ingredients', 100)
+# print("x is:", x)
+# print(np.where(x == x.max())[0])
+
+
+
 
 # x = RSA.pragmatic_speaker(wp, embeddings, list(vocab.Word), vocab, final_boards, beta=200)
+# print(x)
 
 # # need to get the ordered list of pragmatic clues
 # candidate_probs = x[wp_index]
@@ -56,9 +69,10 @@ with open('../data/boards.json') as json_file:
 
 
 ### RANDOM WALK CODE ###
-swow = SWOW('../data')
+# swow = SWOW('../data')
+# swow.save_guess_visit_counts([2,4,8, 16,32])
 
-swow.get_final_clues(vocab, embeddings, final_boards, walk_steps = 8)
+#swow.get_final_clues(vocab, embeddings, final_boards, walk_steps = 8)
 
 # ## note that word1 and word2 MUST be in targets.csv for the code below to run
 # word1 = "debit"

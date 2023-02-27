@@ -336,8 +336,19 @@ class boards:
     
 
 class RSA:
-
-  def compute_board_combos(board_name, boards):
+  def __init__(self):
+    '''
+    initialize with embeddings & board matrices
+    '''
+    with open('../data/boards.json') as json_file:
+      self.final_boards = json.load(json_file)
+    
+    self.vocab = pd.read_csv("../data/vocab.csv")
+    self.embeddings = pd.read_csv("../data/swow_associative_embeddings.csv").transpose().values
+    self.candidates = list(self.vocab.Word)
+    self.create_all_boards_matrices()
+  
+  def compute_board_combos(self,board_name):
     '''
     inputs:
     (1) board_name ("e1_board1_words")
@@ -345,13 +356,13 @@ class RSA:
     all pairwise combinations of the words on the board
 
     '''
-    board = boards[board_name]
+    board = self.final_boards[board_name]
     all_possible_combs = list(itertools.combinations(board, 2))
     combs_df = pd.DataFrame(all_possible_combs, columns =['Word1', 'Word2'])
     combs_df["wordpair"] = combs_df["Word1"] + '-'+ combs_df["Word2"]
     return combs_df
 
-  def create_board_matrix(combs_df, context_board, embeddings, vocab, candidates):
+  def create_board_matrix(self,combs_df, context_board, embeddings, vocab, candidates):
     '''
     inputs:
     (1) combs_df: all combination pairs from a given board
@@ -363,6 +374,8 @@ class RSA:
     output:
     product similarities of given vocab to each wordpair
     '''
+    print("inside create_board_matrix")
+    print("context_board=",context_board)
     # grab subset of words in given board and their corresponding glove vectors
     board_df = vocab[vocab['Word'].isin(context_board)]
     board_word_indices = list(board_df.index)
@@ -394,7 +407,20 @@ class RSA:
     # note that cosine is in range [-1, 1] so we have to convert to [0,1] for this conjunction to be valid
     return ((f_w1_list + 1) /2) * ((f_w2_list + 1)/2)
 
-  def literal_guesser(board_name, embeddings, candidates, vocab, boards):
+  def create_all_boards_matrices(self):
+    '''
+    creates the matrix of similarities for all boards and all possible "candidates": currently full vocab
+    '''
+    print("inside create_all_boards_matrices")
+    self.board_combos = {board_name : self.compute_board_combos(board_name) for board_name in self.final_boards.keys()}
+    print("board_combos created")
+
+    self.board_matrices = {
+      board_name : self.create_board_matrix(self.board_combos[board_name], self.final_boards[board_name], self.embeddings, self.vocab, self.candidates)
+            for board_name in self.final_boards.keys()
+    }
+
+  def literal_guesser(self, board_name, beta):
     '''
     inputs are:
     (1) board name ("e1_board1_words"),
@@ -405,41 +431,101 @@ class RSA:
     output:
     softmax likelihood of different wordpairs under a given set of candidates
 
-    '''
+    '''    
+    print("inside literal guesser")
+    
+    boardmatrix = self.board_matrices[board_name]
+    return softmax(beta*boardmatrix, axis=0)
 
-    board_combos = {board_name : RSA.compute_board_combos(board_name,boards) for board_name in boards.keys()}
-
-    board_matrices = {
-      board_name : RSA.create_board_matrix(board_combos[board_name], boards[board_name], embeddings, vocab, candidates)
-            for board_name in boards.keys()
-    }
-    boardmatrix = board_matrices[board_name]
-    return softmax(boardmatrix, axis=0)
-
-  def pragmatic_speaker(board_name, embeddings, candidates, vocab, boards, beta):
+  def pragmatic_speaker(self, board_name, beta):
     '''
     inputs:
     (1) board name ("e1_board1_words")
     (2) beta: optimized parameter
-    (3) costweight: optimized weight to freequency
-    (4) representation: embedding space to consider, representations
-    (5) modelname: 'glove'
-    (6) candidates (a list of words/clues to iterate over)
-    (7) vocab
-    (8) boards: imported json file
-
+    
     outputs:
     softmax likelihood of each possible clue in "candidates"
 
     '''
-    #candidate_index = [list(vocab["Word"]).index(w) for w in candidates]
-    literal_guesser_prob = RSA.literal_guesser(board_name, embeddings, candidates, vocab, boards)
-    #clues_cost = -np.array([list(vocab["LgSUBTLWF"])[i] for i in candidate_index])
-    #utility = (1-costweight) * literal_guesser_prob - costweight * clues_cost
+    print("inside prag speaker")
+    literal_guesser_prob = self.literal_guesser(board_name, beta)
     return softmax(beta*literal_guesser_prob, axis = 1)
   
-  def pragmatic_guesser(board_name, embeddings,candidates, vocab, boards, beta):
-    return softmax(np.log(RSA.pragmatic_speaker(board_name, embeddings, candidates, vocab, boards, beta)), axis = 0)
+  def pragmatic_guesser(self,board_name, beta):
+    print("inside prag guesser")
+    return softmax(beta*(self.pragmatic_speaker(board_name, beta)), axis = 0)
+  
+  def get_guess_scores(self, beta):
+    '''
+    obtains literal and pragmatic guesser scores for a given clue/board
+    '''
+    print("inside guess scores")
+    self.clues_df = pd.read_csv(f"../data/clues_final.csv".format())
+    guess_scores = pd.DataFrame()
+
+    for wordpair, board in self.final_boards.items():
+      print(wordpair)
+      # it is possible that the combs has it stored in reverse order
+      w1, w2 = wordpair.split("-")
+      reverse_wordpair = w2+"-"+w1
+      keys = list(self.board_combos.keys())
+      wordpairs_in_order = list(self.board_combos[wordpair].wordpair) if wordpair in keys else list(self.board_combos[reverse_wordpair].reverse_wordpair)
+      if len(wordpairs_in_order) == 0:
+        print("empty, regular:")
+        print(self.board_combos[wordpair])
+        print("empty, reverse:")
+        print(self.board_combos[reverse_wordpair])
+        break
+
+      literal_guesser_prob = self.literal_guesser(wordpair, beta)  # this is a 190x12217 array
+      prag_guesser_prob = self.pragmatic_guesser(wordpair, beta)
+      
+      # we need to get prediction scores for specific clues from here
+
+      specific_clue_df = self.clues_df.loc[(self.clues_df["wordpair"]==wordpair)]
+      # get indices of these clues & the array corresponding to that clue from literal_guesser_prob
+      l_high_a_high_p = literal_guesser_prob[:,self.candidates.index(list(specific_clue_df.high_a_high_p_clue)[0])]
+      l_high_a_low_p = literal_guesser_prob[:,self.candidates.index(list(specific_clue_df.high_a_low_p_clue)[0])]
+      l_low_a_high_p = literal_guesser_prob[:,self.candidates.index(list(specific_clue_df.low_a_high_p_clue)[0])]
+      l_low_a_low_p = literal_guesser_prob[:,self.candidates.index(list(specific_clue_df.low_a_low_p_clue)[0])]
+
+      p_high_a_high_p = prag_guesser_prob[:,self.candidates.index(list(specific_clue_df.high_a_high_p_clue)[0])]
+      p_high_a_low_p = prag_guesser_prob[:,self.candidates.index(list(specific_clue_df.high_a_low_p_clue)[0])]
+      p_low_a_high_p = prag_guesser_prob[:,self.candidates.index(list(specific_clue_df.low_a_high_p_clue)[0])]
+      p_low_a_low_p = prag_guesser_prob[:,self.candidates.index(list(specific_clue_df.low_a_low_p_clue)[0])]
+      
+      # now we have the array of wordpair scores for each clue, these need to be combined up
+
+      guess_df1 = pd.DataFrame({"guess": wordpairs_in_order })
+      guess_df1["clue"] = list(specific_clue_df.high_a_high_p_clue)[0]
+      guess_df1["literal_score"] = l_high_a_high_p
+      guess_df1["pragmatic_score"] = p_low_a_low_p
+      guess_df1["wordpair"] = wordpair
+
+      guess_df2 = pd.DataFrame({"guess": wordpairs_in_order })
+      guess_df2["clue"] = list(specific_clue_df.high_a_low_p_clue)[0]
+      guess_df2["literal_score"] = l_high_a_low_p
+      guess_df2["pragmatic_score"] = p_low_a_low_p
+      guess_df2["wordpair"] = wordpair
+
+      guess_df3 = pd.DataFrame({"guess": wordpairs_in_order })
+      guess_df3["clue"] = list(specific_clue_df.low_a_high_p_clue)[0]
+      guess_df3["literal_score"] = l_low_a_high_p
+      guess_df3["pragmatic_score"] = p_low_a_low_p
+      guess_df3["wordpair"] = wordpair
+
+      guess_df4 = pd.DataFrame({"guess": wordpairs_in_order })
+      guess_df4["clue"] = list(specific_clue_df.low_a_low_p_clue)[0]
+      guess_df4["literal_score"] = l_low_a_low_p
+      guess_df4["pragmatic_score"] = p_low_a_low_p
+      guess_df4["wordpair"] = wordpair
+      
+
+      guess_scores = pd.concat([guess_scores, guess_df1, guess_df2, guess_df3, guess_df4])
+      guess_scores.to_csv('../data/guess_scores.csv', index = False)
+
+
+
 
 
 class SWOW:
@@ -452,7 +538,11 @@ class SWOW:
     self.load_graph(data_path)
     self.index_to_name = {k: v['word'] for k,v in self.graph.nodes(data=True)}
     self.name_to_index = {v['word'] : k for k,v in self.graph.nodes(data=True)}
+
+    # import clues
+    self.clues_df = pd.read_csv(f"../data/clues_final.csv".format())
     self.load_random_walks(data_path)
+    self.load_clue_walks(data_path)
 
   def load_graph(self, data_path):
     '''
@@ -484,6 +574,28 @@ class SWOW:
         self.rw = pickle.load(f)
     else :
       self.save_random_walks()
+  
+  def load_clue_walks(self, data_path):
+    '''
+    runs n_walks independent random walks of walk_len length from each words
+    '''
+    if os.path.exists(f'{data_path}/walk_data/clue_walks.pkl'):
+      with open(f'{data_path}/walk_data/clue_walks.pkl', 'rb') as f:
+        self.clues_rw = pickle.load(f)
+    else :
+      self.save_clue_walks()
+
+  def save_clue_walks(self, n_walks=1000, walk_len=10000):
+    '''
+    runs n_walks independent random walks of walk_len length from each clue
+    '''
+    
+    self.clue_words = list(set(list(self.clues_df.high_a_high_p_clue) + list(self.clues_df.high_a_low_p_clue) + list(self.clues_df.low_a_high_p_clue) + list(self.clues_df.low_a_low_p_clue)))
+    indices = self.get_nodes_by_word(self.clue_words)
+    self.clues_rw = walker.random_walks(self.graph, n_walks=n_walks, walk_len=walk_len, start_nodes=indices)
+    with open('../data/walk_data/clue_walks.pkl', 'wb') as f:
+      pickle.dump(self.clues_rw, f)
+
 
   def save_random_walks(self, n_walks = 1000, walk_len = 10000):
     '''
@@ -520,6 +632,60 @@ class SWOW:
     '''
     return [self.index_to_name[index] if index in self.index_to_name else None
             for index in nodes]
+
+  def get_guess_visit_counts(self, clue, board_words, budget_value):
+    '''
+    returns a visit count of specific guesses on a given board for a given clue
+    '''
+    clue_indices = self.get_nodes_by_word([clue])
+    walks = np.array([x for x in self.clues_rw if x[0] in clue_indices]).tolist()
+    guess_counts = defaultdict(int)
+
+    # need to assign 0 count to all words first
+    for word in board_words:
+      guess_counts[word] = 0
+      # now we update these counts based on the walks themselves
+      for clue_walk in walks : # for each walk 
+        for element in clue_walk[: budget_value]:
+          word_list = self.get_words_by_node([element])
+          walk_word = word_list[0]
+          if walk_word  == word : # if the specific word on the board was visited, then update its count
+            guess_counts[word] += 1
+    
+    guess_count_df = pd.DataFrame.from_dict(guess_counts,orient='index', columns=['visit_count'])
+    guess_count_df.reset_index(inplace=True)
+    guess_count_df = guess_count_df.rename(columns = {'index':'word'})
+    guess_count_df["budget"] = budget_value
+    guess_count_df["clue"] = clue
+
+    guess_count_df = guess_count_df.sort_values(by=['visit_count'], ascending=False)
+    return guess_count_df
+  
+  def save_guess_visit_counts(self, budget_list):
+    # Loop through specific  clues and boards
+    visits = {}
+    with open('../data/boards.json') as json_file:
+      final_boards = json.load(json_file)
+
+    main_df = pd.DataFrame()
+    
+    for wordpair, board in  final_boards.items():
+      print(wordpair)
+      # get the clues for the specific wordpair
+      specific_clue_df = self.clues_df.loc[(self.clues_df["wordpair"]==wordpair)]
+      
+      for budget in budget_list:
+        high_a_high_p_df = self.get_guess_visit_counts(list(specific_clue_df.high_a_high_p_clue)[0], board, budget)
+        high_a_low_p_df = self.get_guess_visit_counts(list(specific_clue_df.high_a_low_p_clue)[0], board, budget)
+        low_a_high_p_df = self.get_guess_visit_counts(list(specific_clue_df.low_a_high_p_clue)[0], board, budget)
+        low_a_low_p_df = self.get_guess_visit_counts(list(specific_clue_df.low_a_low_p_clue)[0], board, budget)
+        wordpair_df = pd.concat([high_a_high_p_df, high_a_low_p_df,low_a_high_p_df,low_a_low_p_df])
+        wordpair_df["wordpair"]= wordpair
+        main_df = pd.concat([main_df, wordpair_df])
+        main_df.to_csv('../data/guess_visit_counts.csv', index= False)
+    
+    return main_df
+      
 
   def union_candidates(self, w1, w2, budget_value, vocab):
     '''
