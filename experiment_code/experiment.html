@@ -74,10 +74,38 @@
         var jsPsych = initJsPsych({
                 on_finish: function() {
                     jsPsych.data.displayData();
-                }
+                },
+                show_progress_bar: true,
+                auto_update_progress_bar: false
             });
 
         var subject_id = Math.floor(Math.random()*100000)
+
+        // keep track of attention checks
+        var trial_array = [];
+        for (var i = 0; i < 5; i++) {
+            trial_array.push(1)
+        }
+
+        for (var i = 0; i < 55; i++) {
+            trial_array.push(0)
+        }
+
+        const shuffle = (array) => {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                const temp = array[i];
+                
+                array[i] = array[j];
+                array[j] = temp;
+            }
+            return array;
+        }
+
+        shuffle(trial_array)
+        console.log(trial_array)
+
+        var current_trial = -1
 
         // select the list
         var list = [1, 2, 3, 4]
@@ -102,8 +130,31 @@
                 pragmatics: jsPsych.timelineVariable("pragmatics"),
                 accessibility: jsPsych.timelineVariable("accessibility"),
                 subject: subject_id,
-                trial_type: "trial",
+                type_of_trial: "trial",
                 clue_type: jsPsych.timelineVariable("clue_type")
+            },
+            on_start: function() {
+                current_trial += 1
+            },
+            on_finish: function() {
+                var curr_progress_bar_value = jsPsych.getProgressBarCompleted();
+                jsPsych.setProgressBar(curr_progress_bar_value + (1/60));
+            }
+        }
+
+        var attention = {
+            type: jsPsychSurveyText,
+            questions: [{prompt: "What was the clue for the board that you just completed?", required: true, name: "attention"}],
+            data: {
+                type_of_trial: "attention",
+                subject: subject_id,
+                seen: trial_array[current_trial],
+                clue: jsPsych.timelineVariable("clue")
+            },
+            on_load: function() {
+                if (trial_array[current_trial] == 0) {
+                    jsPsych.finishTrial()
+                }
             }
         }
 
@@ -123,6 +174,10 @@
                 subject: subject_id,
                 type_of_trial: "practice",
                 clue_type: jsPsych.timelineVariable("clue_type")
+            },
+            on_finish: function() {
+                var curr_progress_bar_value = jsPsych.getProgressBarCompleted();
+                jsPsych.setProgressBar(curr_progress_bar_value + (1/4));
             }
         }
 
@@ -139,7 +194,7 @@
 
         var instructions_1 = {
             type: jsPsychHtmlButtonResponse,
-            stimulus: "<p style='font-size: 20px; padding-right: 10%; padding-left: 10%'> Welcome to the Connector experiment, and thank you for choosing to participate! <br> <br> Please read the following instructions so that you know how to play the game: <br> <br> You will be shown a board of 20 words. In addition to the board, you will see a clue. You should think of this clue as coming from a friend or teammate, who is trying to indicate two of the words on the board without directly saying either of them. So, your goal is to interpret the clue and select the two words that you think are the most likely targets for that clue. </p>",
+            stimulus: "<p style='font-size: 20px; padding-right: 10%; padding-left: 10%'> Welcome to the Connector experiment, and thank you for choosing to participate! <br> <br> Please read the following instructions so that you know how to play the game: <br> <br> You will be shown a board of 20 words. In addition to the board, you will see a clue. You should think of this clue as coming from a friend or teammate, who is trying to indicate two of the words on the board without directly saying either of them. So, your goal is to interpret the clue and select the two words that you think are the most likely targets for that clue. <br> <br> You will see a wide variety of clues. Keep in mind that some clues are better than others, but all clues are intended to point you toward two of the words on the board. If you are ever unfamiliar with a word, please do not pause to look it up, as this will interfere with the data. Instead, please use the knowledge you already have and make selections to the best of your ability, as this will give the most authentic response. </p>",
             choices: ["Advance"],
             button_html: "<button class='advance_button'> %choice% </button>",
             data: {
@@ -150,7 +205,7 @@
 
         var instructions_2 = {
             type: jsPsychHtmlButtonResponse,
-            stimulus: "<p style='font-size: 20px; padding-right: 10%; padding-left: 10%'> For example, consider the board below. Here, the clue is FOOD, and our player currently has FAMINE and CALORIE selected. <br> <br> <img src='example.png' style='border: 2px solid black'> <br> <br> When you are playing, simply click on words to select them. The words you click will turn green as a confirmation that they have been selected. If you accidentally click a word, or if you wish to change your choice, simply click a selected word to unselect it, and it will go back to gray. When exactly two words are selected, the Enter Responses button will illuminate. Once you are satisfied with your choices, click the Enter Responses button, and the experiment will automatically move to the next trial. <br> <br> To familiarize you with the game, there are four practice trials. As you play the game, be sure to attend to both speed and accuracy. In other words, make guesses that you think are likely to be correct, but don't linger too long on any one board. When you are ready, scroll down and click the button below to begin. <br> <br> There will be a pause between the practice trials and the experimental trials. </p>",
+            stimulus: "<p style='font-size: 20px; padding-right: 10%; padding-left: 10%'> For example, consider the board below. Here, the clue is FOOD, and our player currently has FAMINE and CALORIE selected. <br> <br> <img src='example.png' style='border: 2px solid black'> <br> <br> When you are playing, simply click on words to select them. The words you click will turn green as a confirmation that they have been selected. If you accidentally click a word, or if you wish to change your choice, simply click a selected word to unselect it, and it will go back to gray. When exactly two words are selected, the Enter Responses button will illuminate. Once you are satisfied with your choices, click the Enter Responses button, and the experiment will automatically move to the next trial. <br> <br> To familiarize you with the game, there are four practice trials. As you play the game, be sure to attend to both speed and accuracy. In other words, make guesses that you think are likely to be correct, but don't linger too long on any one board. When you are ready, click the button below to begin. <br> <br> There will be a pause between the practice trials and the experimental trials. </p>",
             choices: ["Begin Practice Trials"],
             button_html: "<button class='advance_button'> %choice% </button>",
             data: {
@@ -177,11 +232,14 @@
             data: {
                 type_of_trial: "move_to_experiment",
                 subject: subject_id
+            },
+            on_finish: function() {
+                jsPsych.setProgressBar(0)
             }
         }
         
         var experiment_procedure = {
-            timeline: [fixation, trial],
+            timeline: [fixation, trial, attention],
             timeline_variables: trial_list,
             randomize_order: true
         }
