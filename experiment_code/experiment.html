@@ -74,6 +74,7 @@
         var jsPsych = initJsPsych({
                 on_finish: function() {
                     jsPsych.data.displayData();
+                    jsPsych.data.get().localSave("csv", "data.csv")
                 },
                 show_progress_bar: true,
                 auto_update_progress_bar: false
@@ -83,27 +84,12 @@
 
         // keep track of attention checks
         var trial_array = [];
-        for (var i = 0; i < 5; i++) {
+        for (var j = 0; j < 6; j++) {
+            for (var i = 0; i < 9; i++) {
+            trial_array.push(0)
+            }
             trial_array.push(1)
         }
-
-        for (var i = 0; i < 55; i++) {
-            trial_array.push(0)
-        }
-
-        const shuffle = (array) => {
-            for (let i = array.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                const temp = array[i];
-                
-                array[i] = array[j];
-                array[j] = temp;
-            }
-            return array;
-        }
-
-        shuffle(trial_array)
-        console.log(trial_array)
 
         var current_trial = -1
 
@@ -130,7 +116,7 @@
                 pragmatics: jsPsych.timelineVariable("pragmatics"),
                 accessibility: jsPsych.timelineVariable("accessibility"),
                 subject: subject_id,
-                type_of_trial: "trial",
+                type_of_trial: "experiment",
                 clue_type: jsPsych.timelineVariable("clue_type")
             },
             on_start: function() {
@@ -148,15 +134,25 @@
             data: {
                 type_of_trial: "attention",
                 subject: subject_id,
-                seen: trial_array[current_trial],
                 clue: jsPsych.timelineVariable("clue")
             },
             on_load: function() {
+                document.getElementById("jspsych-survey-text-0").style["font-size"] = "20px";
                 if (trial_array[current_trial] == 0) {
                     jsPsych.finishTrial()
                 }
+            },
+            on_finish: function(data) {
+                if (trial_array[current_trial] == 1) {
+                    data.correct = jsPsych.pluginAPI.compareKeys(data.response["attention"], data.clue);
+                    data.response = data.response["attention"];
+                    data.is_seen = 1
+                }
+                else {
+                    data.is_seen = 0
+                }
             }
-        }
+         }
 
         var practice = {
             type: jsPsychConnector,
@@ -226,7 +222,7 @@
 
         var move_to_experiment = {
             type: jsPsychHtmlButtonResponse,
-            stimulus: "<p style='font-size: 20px; padding-right: 10%; padding-left: 10%'> This concludes the practice trials. <br> <br> When you are ready, please click the button below, and the experiment will automatically move you through the 60 experimental trials.</p>",
+            stimulus: "<p style='font-size: 20px; padding-right: 10%; padding-left: 10%'> This concludes the practice trials. <br> <br> When you are ready, please click the button below, and the experiment will automatically move you through the 60 experimental trials. <br> <br> NOTE: At random times during the experiment, you will be asked to recall the clue from the trial that you just completed. Make sure to pay attention, as missing any of these comprehension checks will discount all of your data. </p>",
             choices: ["Begin Experimental Trials"],
             button_html: "<button class='advance_button'> %choice% </button>",
             data: {
@@ -250,6 +246,11 @@
             data: {
                 type_of_trial: "demographics",
                 subject: subject_id
+            },
+            on_finish: function(data) {
+                data.age = data.response["age"]
+                data.gender = data.response["gender"]
+                data.education = data.response["education"]
             }
         }
 
@@ -265,10 +266,13 @@
             data: {
                 type_of_trial: "demographics",
                 subject: subject_id
+            },
+            on_finish: function(data) {
+                data.race = data.response["race"]
             }
         }
 
-        var ethnicity = {
+        var ethnicity_hand_alert = {
             type: jsPsychSurveyMultiChoice,
             questions: [{
                 prompt: "Are you of Hispanic, Latino/a/x or of Spanish origin?", 
@@ -291,6 +295,11 @@
             data: {
                 type_of_trial: "demographics",
                 subject: subject_id
+            },
+            on_finish: function(data) {
+                data.ethnicity = data.response["ethnicity"]
+                data.hand = data.response["dominant_hand"]
+                data.alert = data.response["alert"]
             }
         }
 
@@ -300,11 +309,14 @@
             data: {
                 type_of_trial: "demographics",
                 subject: subject_id
+            },
+            on_finish: function(data) {
+                data.anything_else = data.response["anything_else"]
             }
         }
 
         var demographics = {
-            timeline: [age_gender_education, race, ethnicity, anything_else]
+            timeline: [age_gender_education, race, ethnicity_hand_alert, anything_else]
         }
 
         var debrief = {
