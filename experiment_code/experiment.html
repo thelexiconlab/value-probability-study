@@ -72,10 +72,6 @@
     <body></body>
     <script>
         var jsPsych = initJsPsych({
-                on_finish: function() {
-                    jsPsych.data.displayData();
-                    jsPsych.data.get().localSave("csv", "data.csv")
-                },
                 show_progress_bar: true,
                 auto_update_progress_bar: false
             });
