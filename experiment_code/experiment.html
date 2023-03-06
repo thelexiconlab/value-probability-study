@@ -15,6 +15,7 @@
         <script src="practice_stimuli.js"></script>
         <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.2"></script>
         <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.1.2"></script>
+        <script src="https://unpkg.com/@jspsych/plugin-preload@1.1.2"></script>
         <style>
             .connector-button{
                 background-color: gray;
@@ -72,11 +73,13 @@
     <body></body>
     <script>
         var jsPsych = initJsPsych({
-                show_progress_bar: true,
-                auto_update_progress_bar: false
+            show_progress_bar: true,
+            auto_update_progress_bar: false
             });
 
         var subject_id = Math.floor(Math.random()*100000)
+
+        var images = ["example.png"]
 
         // keep track of attention checks
         var trial_array = [];
@@ -87,6 +90,7 @@
             trial_array.push(1)
         }
 
+        var ask_english = 0
         var current_trial = -1
 
         // select the list
@@ -97,6 +101,29 @@
         else if(CONDITION == 2){trial_list = list2}
         else if(CONDITION == 3){trial_list = list3}
         else{trial_list = list4}
+
+        var preload = {
+            type: jsPsychPreload,
+            images: images
+        }
+
+        var prolific_id = {
+            type: jsPsychSurveyText,
+            preamble: "Welcome to the study!",
+            questions: [
+                {
+                    prompt: "Before you begin, please copy your unique Prolific ID and paste it in the box below", 
+                    required: true, 
+                    name: "prolific_id"}
+            ],
+            data: {
+                type_of_trial: "prolific_id",
+                subject: subject_id
+            },
+            on_finish: function(data) {
+                data.prolific_id = data.response["prolific_id"]
+            }
+        }
 
         var trial = {
             type: jsPsychConnector,
@@ -236,9 +263,32 @@
             randomize_order: true
         }
 
+        var move_to_demo = {
+            type: jsPsychHtmlButtonResponse,
+            stimulus: "<p style='font-size: 20px; padding-right: 10%; padding-left: 10%'> You have completed the experiment portion! <br> <br> Before you are done, we would like you to answer some basic demographic questions. Note that your answers to these questions will not affect your compensation/credit. While some questions are required, you can choose to skip others that you do not feel comfortable answering. <br> <br> Click the button below to continue </p>",
+            choices: ["Advance"],
+            button_html: "<button class='advance_button'> %choice% </button>",
+            data: {
+                type_of_trial: "demographics",
+                subject: subject_id
+            }
+        }
+
         var age_gender_education = {
             type: jsPsychSurveyText,
-            questions: [{prompt: "What is your age?", required: false, name: "age"}, {prompt: "What is your gender?", required: false, name: "gender"}, {prompt: "How many years of formal education have you had? (Consider graduating high school to be 12 years)", required: false, name: "education"}],
+            questions: [
+                {
+                    prompt: "What is your age?", 
+                    required: true, 
+                    name: "age"}, 
+                {
+                    prompt: "What is your gender?", 
+                    required: true, 
+                    name: "gender"}, 
+                {
+                    prompt: "How many years of formal education have you had? (Consider graduating high school to be 12 years)", 
+                    required: true, 
+                    name: "education"}],
             data: {
                 type_of_trial: "demographics",
                 subject: subject_id
@@ -268,26 +318,34 @@
             }
         }
 
-        var ethnicity_hand_alert = {
+        var ethnicity_hand_alert_english = {
             type: jsPsychSurveyMultiChoice,
-            questions: [{
-                prompt: "Are you of Hispanic, Latino/a/x or of Spanish origin?", 
-                name: 'ethnicity', 
-                options: ['Yes', 'No', 'Prefer not to respond'], 
-                required: false
-            }, 
-            {
-                prompt: "What is your dominant hand?", 
-                name: 'dominant_hand', 
-                options: ['Left', 'Right', 'Ambidexterous'], 
-                required: false
-            }, 
-            {
-                prompt: "Please indicate what time of the day you feel most alert:", 
-                name: 'alert', 
-                options: ['Morning', 'Afternoon', 'Evening', 'No Differences'], 
-                required: false
-            }],
+            questions: [
+                {
+                    prompt: "Are you of Hispanic, Latino/a/x or of Spanish origin?", 
+                    name: 'ethnicity', 
+                    options: ['Yes', 'No', 'Prefer not to respond'], 
+                    required: false
+                }, 
+                {
+                    prompt: "What is your dominant hand?", 
+                    name: 'dominant_hand', 
+                    options: ['Left', 'Right', 'Ambidexterous'], 
+                    required: false
+                }, 
+                {
+                    prompt: "Please indicate what time of the day you feel most alert:", 
+                    name: 'alert', 
+                    options: ['Morning', 'Afternoon', 'Evening', 'No Differences'], 
+                    required: false
+                },
+                {
+                    prompt: "Is English your first language?", 
+                    name: 'english', 
+                    options: ['Yes', 'No'], 
+                    required: true
+                }
+            ],
             data: {
                 type_of_trial: "demographics",
                 subject: subject_id
@@ -296,6 +354,40 @@
                 data.ethnicity = data.response["ethnicity"]
                 data.hand = data.response["dominant_hand"]
                 data.alert = data.response["alert"]
+                data.english = data.response["english"]
+                if (data.english == "No") {
+                    ask_english = 1
+                }
+            }
+        }
+
+        var not_english = {
+            type: jsPsychSurveyText,
+            preamble: "<p> You indicated that English is not your first language. Please answer the following questions:",
+            questions: [
+                {
+                    prompt: "What is your first language?", 
+                    required: true, 
+                    name: "first_language"}, 
+                {
+                    prompt: "At what age did you learn English?", 
+                    required: true, 
+                    name: "age_learned"}
+            ],
+            data: {
+                type_of_trial: "not_english",
+                subject: subject_id
+            },
+            on_load: function() {
+                if (ask_english == 0) {
+                    jsPsych.finishTrial()
+                }
+            },
+            on_finish: function(data) {
+                if (ask_english == 1) {
+                    data.first_language = data.response["first_language"]
+                    data.age_learned = data.response["age_learned"]
+                }
             }
         }
 
@@ -312,12 +404,12 @@
         }
 
         var demographics = {
-            timeline: [age_gender_education, race, ethnicity_hand_alert, anything_else]
+            timeline: [move_to_demo, age_gender_education, race, ethnicity_hand_alert_english, not_english, anything_else]
         }
 
         var debrief = {
             type: jsPsychHtmlButtonResponse,
-            stimulus: "<p style='font-size: 20px; padding-right: 10%; padding-left: 10%'> This concludes the experiment. Thank you for your participation! <br> <br> If you want to learn more about this study, feel free to read this <a target='_blank' href='https://docs.google.com/document/d/1i8IoBbswSEUIXgkM1o68yRQSi3qYNkqx/edit?usp=sharing&ouid=101741936850660538660&rtpof=true&sd=true'>debrief<a> document, which explains the purpose and theory behind this research, and contains contact information for the experimenters. If this research interests you, feel free to explore our <a target='_blank' href='https://thelexiconlab.github.io/'>lab website</a> as well! <br> <br> IMPORTANT: Please return to this site and click 'Finish and Save' to save your data after reading. <br> <br> Thank you again!",
+            stimulus: "<p style='font-size: 20px; padding-right: 10%; padding-left: 10%'> This concludes the experiment. Thank you for your participation! <br> <br> Your completion code is CIJCTUHR. Please copy this code and paste it into Prolific to receive compensation. <br> <br> If you want to learn more about this study, feel free to read this <a target='_blank' href='https://docs.google.com/document/d/1i8IoBbswSEUIXgkM1o68yRQSi3qYNkqx/edit?usp=sharing&ouid=101741936850660538660&rtpof=true&sd=true'>debrief<a> document, which explains the purpose and theory behind this research, and contains contact information for the experimenters. If this research interests you, feel free to explore our <a target='_blank' href='https://thelexiconlab.github.io/'>lab website</a> as well! <br> <br> IMPORTANT: Please return to this site and click 'Finish and Save' to save your data after reading. <br> <br> Once you have copied your completion code and clicked 'Finish and Save,' you may close this tab. <br> <br> Thank you again!",
             choices: ["Finish and Save"],
             button_html: "<button class='advance_button'> %choice% </button>",
             data: {
@@ -327,6 +419,6 @@
         }
 
         //run the code
-        jsPsych.run([instructions, practice_procedure, move_to_experiment, experiment_procedure, demographics, debrief]);
+        jsPsych.run([preload, prolific_id, instructions, practice_procedure, move_to_experiment, experiment_procedure, move_to_demo, demographics, debrief]);
     </script>
 </html>
