@@ -107,21 +107,21 @@
             images: images
         }
 
-        var prolific_id = {
+        var id = {
             type: jsPsychSurveyText,
             preamble: "Welcome to the study!",
             questions: [
                 {
                     prompt: "Before you begin, please copy your unique Prolific ID and paste it in the box below", 
                     required: true, 
-                    name: "prolific_id"}
+                    name: "id"}
             ],
             data: {
-                type_of_trial: "prolific_id",
+                type_of_trial: "id",
                 subject: subject_id
             },
             on_finish: function(data) {
-                data.prolific_id = data.response["prolific_id"]
+                data.id = data.response["id"]
             }
         }
 
@@ -419,6 +419,6 @@
         }
 
         //run the code
-        jsPsych.run([preload, prolific_id, instructions, practice_procedure, move_to_experiment, experiment_procedure, move_to_demo, demographics, debrief]);
+        jsPsych.run([preload, id, instructions, practice_procedure, move_to_experiment, experiment_procedure, move_to_demo, demographics, debrief]);
     </script>
 </html>
