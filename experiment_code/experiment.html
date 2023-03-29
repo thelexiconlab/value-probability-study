@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title> Connector Experiment </title>
+        <script src="jspsych/jspsych.js"></script>
+        <link href="jspsych/jspsych.css" rel="stylesheet" type="text/css" />
+        <script src="jspsych/plugin-connector.js"></script>
+        <script src="https://unpkg.com/@jspsych/plugin-survey-text@1.1.2"></script>
+        <script src="https://unpkg.com/@jspsych/plugin-survey-multi-select@1.1.2"></script>
+        <script src="https://unpkg.com/@jspsych/plugin-survey-multi-choice@1.1.2"></script>
+        <script src="stimuli_1.js"></script>
+        <script src="stimuli_2.js"></script>
+        <script src="stimuli_3.js"></script>
+        <script src="stimuli_4.js"></script>
+        <script src="practice_stimuli.js"></script>
+        <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.2"></script>
+        <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.1.2"></script>
+        <script src="https://unpkg.com/@jspsych/plugin-preload@1.1.2"></script>
+        <style>
+            .connector-button{
+                background-color: gray;
+                border: none;
+                border-radius: 10px;
+                color: white;
+                padding: 15px 32px;
+                text-align: center;
+                text-decoration: none;
+                display: inline-block;
+                font-size: 16px;
+                margin: 5px 0.5%;
+                cursor: pointer;
+                width: 15%;
+            }
+            .advance_button{
+                background-color: gray;
+                border: none;
+                border-radius: 10px;
+                color: white;
+                padding: 15px 32px;
+                text-align: center;
+                text-decoration: none;
+                display: inline-block;
+                font-size: 16px;
+                margin: 5px 0.5%;
+                cursor: pointer;
+            }
+            .disabled {
+                opacity: 0.25;
+                cursor: not-allowed;
+            }
+            .enabled {
+                opacity: 1;
+                cursor: pointer;
+            }
+            .selected {
+                background-color: green;
+            }
+            .finish-button{
+                background-color: blue;
+                border: none;
+                border-radius: 10px;
+                color: white;
+                padding: 15px 32px;
+                text-align: center;
+                text-decoration: none;
+                display: inline-block;
+                font-size: 16px;
+                margin: 5px 1%;
+                width: 15%;
+            }
+        </style>
+    </head>
+    <body></body>
+    <script>
+        var jsPsych = initJsPsych({
+            show_progress_bar: true,
+            auto_update_progress_bar: false
+            });
+
+        var subject_id = Math.floor(Math.random()*100000)
+
+        var images = ["example.png"]
+
+        // keep track of attention checks
+        var trial_array = [];
+        for (var j = 0; j < 6; j++) {
+            for (var i = 0; i < 9; i++) {
+            trial_array.push(0)
+            }
+            trial_array.push(1)
+        }
+
+        var ask_english = 0
+        var current_trial = -1
+
+        // select the list
+        var list = [1, 2, 3, 4]
+        var CONDITION = list[Math.floor(Math.random()*list.length)];
+        var trial_list = []
+        if(CONDITION == 1){trial_list = list1}
+        else if(CONDITION == 2){trial_list = list2}
+        else if(CONDITION == 3){trial_list = list3}
+        else{trial_list = list4}
+
+        var preload = {
+            type: jsPsychPreload,
+            images: images
+        }
+
+        var id = {
+            type: jsPsychSurveyText,
+            preamble: "Welcome to the study!",
+            questions: [
+                {
+                    prompt: "Before you begin, please copy your unique Prolific ID and paste it in the box below", 
+                    required: true, 
+                    name: "id"}
+            ],
+            data: {
+                type_of_trial: "id",
+                subject: subject_id
+            },
+            on_finish: function(data) {
+                data.id = data.response["id"]
+            }
+        }
+
+        var trial = {
+            type: jsPsychConnector,
+            stimulus: jsPsych.timelineVariable("clue"),
+            choices: jsPsych.timelineVariable("board"),
+            prompt: "Please select two words from the board",
+            num_buttons: 2,
+            answer: jsPsych.timelineVariable("words"),
+            data: {
+                words: jsPsych.timelineVariable("words"),
+                clue: jsPsych.timelineVariable("clue"),
+                board: jsPsych.timelineVariable("board"),
+                pragmatics: jsPsych.timelineVariable("pragmatics"),
+                accessibility: jsPsych.timelineVariable("accessibility"),
+                subject: subject_id,
+                type_of_trial: "experiment",
+                clue_type: jsPsych.timelineVariable("clue_type")
+            },
+            on_start: function() {
+                current_trial += 1
+            },
+            on_finish: function() {
+                var curr_progress_bar_value = jsPsych.getProgressBarCompleted();
+                jsPsych.setProgressBar(curr_progress_bar_value + (1/60));
+            }
+        }
+
+        var attention = {
+            type: jsPsychSurveyText,
+            questions: [{prompt: "What was the clue for the board that you just completed?", required: true, name: "attention"}],
+            data: {
+                type_of_trial: "attention",
+                subject: subject_id,
+                clue: jsPsych.timelineVariable("clue")
+            },
+            on_load: function() {
+                document.getElementById("jspsych-survey-text-0").style["font-size"] = "20px";
+                if (trial_array[current_trial] == 0) {
+                    jsPsych.finishTrial()
+                }
+            },
+            on_finish: function(data) {
+                if (trial_array[current_trial] == 1) {
+                    data.correct = jsPsych.pluginAPI.compareKeys(data.response["attention"], data.clue);
+                    data.response = data.response["attention"];
+                    data.is_seen = 1
+                }
+                else {
+                    data.is_seen = 0
+                }
+            }
+         }
+
+        var practice = {
+            type: jsPsychConnector,
+            stimulus: jsPsych.timelineVariable("clue"),
+            choices: jsPsych.timelineVariable("board"),
+            prompt: "Please select two words from the board",
+            num_buttons: 2,
+            answer: jsPsych.timelineVariable("words"),
+            data: {
+                words: jsPsych.timelineVariable("words"),
+                clue: jsPsych.timelineVariable("clue"),
+                board: jsPsych.timelineVariable("board"),
+                pragmatics: jsPsych.timelineVariable("pragmatics"),
+                accessibility: jsPsych.timelineVariable("accessibility"),
+                subject: subject_id,
+                type_of_trial: "practice",
+                clue_type: jsPsych.timelineVariable("clue_type")
+            },
+            on_finish: function() {
+                var curr_progress_bar_value = jsPsych.getProgressBarCompleted();
+                jsPsych.setProgressBar(curr_progress_bar_value + (1/4));
+            }
+        }
+
+        var fixation = {
+            type: jsPsychHtmlKeyboardResponse,
+            stimulus: "<p style='font-size: 48px;'>+</p>",
+            choices: "NO_KEYS",
+            trial_duration: 1000,
+            data: {
+                type_of_trial: "fixation",
+                subject: subject_id
+            }
+        }
+
+        var instructions_1 = {
+            type: jsPsychHtmlButtonResponse,
+            stimulus: "<p style='font-size: 20px; padding-right: 10%; padding-left: 10%'> Welcome to the Connector experiment, and thank you for choosing to participate! <br> <br> Please read the following instructions so that you know how to play the game: <br> <br> You will be shown a board of 20 words. In addition to the board, you will see a clue. You should think of this clue as coming from a friend or teammate, who is trying to indicate two of the words on the board without directly saying either of them. So, your goal is to interpret the clue and select the two words that you think are the most likely targets for that clue. <br> <br> You will see a wide variety of clues. Keep in mind that some clues are better than others, but all clues are intended to point you toward two of the words on the board. If you are ever unfamiliar with a word, please do not pause to look it up, as this will interfere with the data. Instead, please use the knowledge you already have and make selections to the best of your ability, as this will give the most authentic response. </p>",
+            choices: ["Advance"],
+            button_html: "<button class='advance_button'> %choice% </button>",
+            data: {
+                type_of_trial: "instructions",
+                subject: subject_id
+            }
+        }
+
+        var instructions_2 = {
+            type: jsPsychHtmlButtonResponse,
+            stimulus: "<p style='font-size: 20px; padding-right: 10%; padding-left: 10%'> For example, consider the board below. Here, the clue is FOOD, and our player currently has FAMINE and CALORIE selected. <br> <br> <img src='example.png' style='border: 2px solid black'> <br> <br> When you are playing, simply click on words to select them. The words you click will turn green as a confirmation that they have been selected. If you accidentally click a word, or if you wish to change your choice, simply click a selected word to unselect it, and it will go back to gray. When exactly two words are selected, the Enter Responses button will illuminate. Once you are satisfied with your choices, click the Enter Responses button, and the experiment will automatically move to the next trial. <br> <br> To familiarize you with the game, there are four practice trials. As you play the game, be sure to attend to both speed and accuracy. In other words, make guesses that you think are likely to be correct, but don't linger too long on any one board. When you are ready, click the button below to begin. <br> <br> There will be a pause between the practice trials and the experimental trials. </p>",
+            choices: ["Begin Practice Trials"],
+            button_html: "<button class='advance_button'> %choice% </button>",
+            data: {
+                type_of_trial: "instructions",
+                subject: subject_id
+            }
+        }
+
+        var instructions = {
+            timeline: [instructions_1, instructions_2]
+        }
+
+        var practice_procedure = {
+            timeline: [fixation, practice],
+            timeline_variables: prac_list,
+            randomize_order: true
+        }
+
+        var move_to_experiment = {
+            type: jsPsychHtmlButtonResponse,
+            stimulus: "<p style='font-size: 20px; padding-right: 10%; padding-left: 10%'> This concludes the practice trials. <br> <br> When you are ready, please click the button below, and the experiment will automatically move you through the 60 experimental trials. <br> <br> NOTE: At random times during the experiment, you will be asked to recall the clue from the trial that you just completed. Make sure to pay attention, as missing any of these comprehension checks will discount all of your data. </p>",
+            choices: ["Begin Experimental Trials"],
+            button_html: "<button class='advance_button'> %choice% </button>",
+            data: {
+                type_of_trial: "move_to_experiment",
+                subject: subject_id
+            },
+            on_finish: function() {
+                jsPsych.setProgressBar(0)
+            }
+        }
+        
+        var experiment_procedure = {
+            timeline: [fixation, trial, attention],
+            timeline_variables: trial_list,
+            randomize_order: true
+        }
+
+        var move_to_demo = {
+            type: jsPsychHtmlButtonResponse,
+            stimulus: "<p style='font-size: 20px; padding-right: 10%; padding-left: 10%'> You have completed the experiment portion! <br> <br> Before you are done, we would like you to answer some basic demographic questions. Note that your answers to these questions will not affect your compensation/credit. While some questions are required, you can choose to skip others that you do not feel comfortable answering. <br> <br> Click the button below to continue </p>",
+            choices: ["Advance"],
+            button_html: "<button class='advance_button'> %choice% </button>",
+            data: {
+                type_of_trial: "demographics",
+                subject: subject_id
+            }
+        }
+
+        var age_gender_education = {
+            type: jsPsychSurveyText,
+            questions: [
+                {
+                    prompt: "What is your age?", 
+                    required: true, 
+                    name: "age"}, 
+                {
+                    prompt: "What is your gender?", 
+                    required: true, 
+                    name: "gender"}, 
+                {
+                    prompt: "How many years of formal education have you had? (Consider graduating high school to be 12 years)", 
+                    required: true, 
+                    name: "education"}],
+            data: {
+                type_of_trial: "demographics",
+                subject: subject_id
+            },
+            on_finish: function(data) {
+                data.age = data.response["age"]
+                data.gender = data.response["gender"]
+                data.education = data.response["education"]
+            }
+        }
+
+        var race = {
+            type: jsPsychSurveyMultiSelect,
+            questions: [{
+                prompt: "Please select all the racial categories that apply to you:", 
+                options: ["American Indian/Alaskan Native","Asian", "Black/African American", "Native Hawaiian or Other Pacific Islander" , "White/Caucasian", "More than once race", "Other"], 
+                horizontal: false,
+                required: false,
+                name: 'race'
+            }],
+            data: {
+                type_of_trial: "demographics",
+                subject: subject_id
+            },
+            on_finish: function(data) {
+                data.race = data.response["race"]
+            }
+        }
+
+        var ethnicity_hand_alert_english = {
+            type: jsPsychSurveyMultiChoice,
+            questions: [
+                {
+                    prompt: "Are you of Hispanic, Latino/a/x or of Spanish origin?", 
+                    name: 'ethnicity', 
+                    options: ['Yes', 'No', 'Prefer not to respond'], 
+                    required: false
+                }, 
+                {
+                    prompt: "What is your dominant hand?", 
+                    name: 'dominant_hand', 
+                    options: ['Left', 'Right', 'Ambidexterous'], 
+                    required: false
+                }, 
+                {
+                    prompt: "Please indicate what time of the day you feel most alert:", 
+                    name: 'alert', 
+                    options: ['Morning', 'Afternoon', 'Evening', 'No Differences'], 
+                    required: false
+                },
+                {
+                    prompt: "Is English your first language?", 
+                    name: 'english', 
+                    options: ['Yes', 'No'], 
+                    required: true
+                }
+            ],
+            data: {
+                type_of_trial: "demographics",
+                subject: subject_id
+            },
+            on_finish: function(data) {
+                data.ethnicity = data.response["ethnicity"]
+                data.hand = data.response["dominant_hand"]
+                data.alert = data.response["alert"]
+                data.english = data.response["english"]
+                if (data.english == "No") {
+                    ask_english = 1
+                }
+            }
+        }
+
+        var not_english = {
+            type: jsPsychSurveyText,
+            preamble: "<p> You indicated that English is not your first language. Please answer the following questions:",
+            questions: [
+                {
+                    prompt: "What is your first language?", 
+                    required: true, 
+                    name: "first_language"}, 
+                {
+                    prompt: "At what age did you learn English?", 
+                    required: true, 
+                    name: "age_learned"}
+            ],
+            data: {
+                type_of_trial: "not_english",
+                subject: subject_id
+            },
+            on_load: function() {
+                if (ask_english == 0) {
+                    jsPsych.finishTrial()
+                }
+            },
+            on_finish: function(data) {
+                if (ask_english == 1) {
+                    data.first_language = data.response["first_language"]
+                    data.age_learned = data.response["age_learned"]
+                }
+            }
+        }
+
+        var anything_else = {
+            type: jsPsychSurveyText,
+            questions: [{prompt: "Is there anything else we should know about that might have affected your performance during the experiment? (e.g., lack of sleep, feeling ill)", required: false, name: "anything_else"}],
+            data: {
+                type_of_trial: "demographics",
+                subject: subject_id
+            },
+            on_finish: function(data) {
+                data.anything_else = data.response["anything_else"]
+            }
+        }
+
+        var demographics = {
+            timeline: [move_to_demo, age_gender_education, race, ethnicity_hand_alert_english, not_english, anything_else]
+        }
+
+        var debrief = {
+            type: jsPsychHtmlButtonResponse,
+            stimulus: "<p style='font-size: 20px; padding-right: 10%; padding-left: 10%'> This concludes the experiment. Thank you for your participation! <br> <br> Your completion code is CIJCTUHR. Please copy this code and paste it into Prolific to receive compensation. <br> <br> If you want to learn more about this study, feel free to read this <a target='_blank' href='https://docs.google.com/document/d/1i8IoBbswSEUIXgkM1o68yRQSi3qYNkqx/edit?usp=sharing&ouid=101741936850660538660&rtpof=true&sd=true'>debrief<a> document, which explains the purpose and theory behind this research, and contains contact information for the experimenters. If this research interests you, feel free to explore our <a target='_blank' href='https://thelexiconlab.github.io/'>lab website</a> as well! <br> <br> IMPORTANT: Please return to this site and click 'Finish and Save' to save your data after reading. <br> <br> Once you have copied your completion code and clicked 'Finish and Save,' you may close this tab. <br> <br> Thank you again!",
+            choices: ["Finish and Save"],
+            button_html: "<button class='advance_button'> %choice% </button>",
+            data: {
+                type_of_trial: "debrief",
+                subject: subject_id
+            }
+        }
+
+        //run the code
+        jsPsych.run([preload, id, instructions, practice_procedure, move_to_experiment, experiment_procedure, move_to_demo, demographics, debrief]);
+    </script>
+</html>
