@@ -1,0 +1,231 @@
+---
+title: "preliminary_scripts"
+output: html_document
+date: "2023-04-05"
+---
+
+#install new packages
+```{r}
+#install.packages("stringdist")
+#install.packages("lmerTest")
+#install.packages("sjPlot")
+#install.packages("Hmisc")
+#install.packages("psych")
+#install.packages("data.table")
+#install.packages("MuMIn")
+```
+
+
+# load packages
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(ggthemes)
+library(stringdist)
+library(lme4)
+library(lmerTest)
+library(sjPlot)
+library(Hmisc)
+library(psych)
+library(broom)
+library(data.table)
+```
+
+# import data from two sources
+```{r}
+sona_data = read_csv("../data/behavioral/connector-ap-sona.csv")
+other_data = read_csv("../data/behavioral/connector-ap.csv")%>%
+  mutate(sona_id = 1) %>%
+  relocate(sona_id, .before = rt)
+
+data = rbindlist(list(sona_data, other_data))
+```
+
+
+#explore the data
+```{r}
+nrow(data)
+ncol(data)
+data %>%
+  group_by(subject) %>%
+  count()
+data %>%
+  group_by(clue_type) %>%
+  count()
+data %>%
+  group_by(subject, clue_type) %>%
+  count()
+```
+
+# filter and select down to analyzable data
+```{r}
+trials = data %>%
+  filter(type_of_trial == "experiment" | is_seen == 1)
+
+
+nrow(trials)
+ncol(trials)
+trials %>%
+  group_by(subject) %>%
+  count()
+trials %>%
+  group_by(clue_type) %>%
+  count()
+trials %>%
+  group_by(subject, clue_type) %>%
+  count()
+```
+
+# filter subjects with imperfect attention checks
+```{r}
+incorrect_attentions = trials %>%
+  mutate(adjusted_attention = ifelse(is_seen == 1, ifelse(stringdist(tolower(response), clue, method = "lv") < 2, 1, 0), 2)) %>%
+  filter(adjusted_attention == 0)
+
+incorrect_attentions = incorrect_attentions %>%
+  group_by(subject) %>%
+  count()%>%
+  # additional filter to remove only people who got more than 1 wrong
+  filter(n >1)
+
+trials = trials %>%
+  filter(!(subject %in% incorrect_attentions$subject))
+  # need to add here code to remove the singular incorrect attention trials
+```
+
+# filter out subjects with incomplete data
+```{r}
+trials_by_subject = trials %>%
+  group_by(subject) %>%
+  count()
+
+insufficient_trials = trials_by_subject %>%
+  filter(n < 66)
+
+trials = trials %>%
+  filter(!(subject %in% insufficient_trials$subject)) %>%
+  filter(type_of_trial == "experiment")
+
+trials %>%
+  group_by(subject) %>%
+  count()
+```
+
+# split accuracy into high and low
+```{r}
+trials = trials %>%
+  mutate(accessibility_categorical = ifelse(accessibility < mean(accessibility), "Low", "High"))
+```
+
+
+# plot accuracy by pragmatics and accessibility
+```{r}
+trials %>%
+  ggplot(aes(x = pragmatics, y = accuracy, group = accessibility_categorical, color = accessibility_categorical)) + 
+  geom_smooth(method = "lm") + 
+  theme_few()
+```
+
+# generalized linear mixed effects model
+```{r}
+# center/scale accessibility and pragmatics
+# now 0 means mean value of A/P and scaling bring everything to z-scores
+trials = trials %>%
+  mutate(center_a = as.numeric(scale(accessibility, center = TRUE, scale = TRUE)),
+         center_p = as.numeric(scale(pragmatics, center = TRUE, scale= TRUE)))
+
+## partial model
+glmer1 = glmer(data = trials, accuracy ~ center_p*center_a + (center_p |subject) + (center_p |words), family = "binomial")
+
+## full model
+#glmer1 = glmer(data = trials, accuracy ~ center_p*center_a + (center_p*center_a|subject) + (center_p*center_a|words), family = "binomial")
+
+fixed_effects = fixef(glmer1)
+probs = exp(fixed_effects)/(1+exp(fixed_effects))
+
+summary(glmer1)
+car::Anova(glmer1)
+MuMIn::r.squaredGLMM(glmer1)
+
+## plot predicted plot from model
+
+sjPlot::plot_model(glmer1, type = "int") + theme_few()
+```
+
+#descriptives
+```{r}
+data %>%
+  group_by(subject) %>%
+  count()
+acc_by_subject = trials %>%
+  group_by(subject) %>%
+  summarise(av_acc = mean(accuracy))
+mean(acc_by_subject$av_acc)
+sd(acc_by_subject$av_acc)
+ 
+c = trials %>%
+  rowwise() %>%
+  mutate(comma_count = str_count(all_responses, ",") + 1) %>%
+  select(all_responses, comma_count)
+mean(c$comma_count)
+```
+
+
+# split into guess1 and guess2
+```{r}
+x = trials %>% 
+  separate(response, into = c("guess1", "guess2"), sep = ",") %>%
+  mutate(guess1 = gsub("[^a-zA-Z]", "", guess1)) %>%
+  mutate(guess1 = tolower(guess1)) %>%
+  mutate(guess2 = gsub("[^a-zA-Z]", "", guess2)) %>%
+  mutate(guess2 = tolower(guess2))
+  #left_join(visit_counts)
+```
+
+# get counts of each word by clue
+```{r}
+x_1 = x %>%
+  group_by(guess1, clue) %>%
+  count()
+x_2 = x %>%
+  group_by(guess2,clue) %>%
+  count()
+guessed_words = bind_rows(x_1, x_2) %>%
+  mutate(word = ifelse(!(is.na(guess1)), guess1, guess2)) %>%
+  group_by(word, clue) %>%
+  summarise(n = sum(n))
+y = trials %>%
+  group_by(clue) %>%
+  count()
+guessed_words = guessed_words %>%
+  mutate(probability = n/y$n[match(clue, y$clue)])
+```
+
+
+# read guess_visit_counts
+```{r}
+guess_accessibility = read_csv("../data/stimuli/guess_visit_counts.csv")
+```
+
+# join accessibility with word counts
+```{r}
+guessed_words = guessed_words %>%
+  left_join(guess_accessibility)
+
+# conduct lmer with visit_counts predicting probability, random slopes and intercepts at the word level (since visit counts are for guesses not clues)
+
+guessed_words %>%
+  ggplot(aes(x = visit_count, y = probability, group = budget, color = budget)) +
+  geom_smooth(method = "lm") + 
+  theme_few()
+
+models_2to16 = guessed_words %>% filter(budget < 16) %>%
+  group_by(budget) %>%
+  do(model = lmer(data = ., probability ~ visit_count + (visit_count|word)), 
+     control = lmerControl(optimizer="bobyqa",optCtrl=list(maxfun=2000000)))
+
+MuMIn::r.squaredGLMM(models_2to16$model[[3]])
+```
+
+
+
