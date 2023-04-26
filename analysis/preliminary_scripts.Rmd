@@ -19,6 +19,8 @@ date: "2023-04-05"
 # load packages
 ```{r}
 library(tidyverse)
+library(car)
+library(readr)
 library(ggplot2)
 library(ggthemes)
 library(stringdist)
@@ -29,87 +31,200 @@ library(Hmisc)
 library(psych)
 library(broom)
 library(data.table)
+library(MuMIn)
 ```
 
 # import data from two sources
 ```{r}
-sona_data = read_csv("../data/behavioral/connector-ap-sona.csv")
-other_data = read_csv("../data/behavioral/connector-ap.csv")%>%
+sona_data = read_csv("../data/behavioral/connector-ap-sona.csv", col_types = cols(question_order = col_character(), race = col_character(), ethnicity = col_character(), hand = col_character(), alert = col_character(), anything_else = col_character(), english = col_character(), first_language = col_character(), age_learned = col_character()))
+other_data = read_csv("../data/behavioral/connector-ap.csv", col_types = cols(question_order = col_character(), race = col_character(), ethnicity = col_character(), hand = col_character(), alert = col_character(), anything_else = col_character(), english = col_character(), first_language = col_character(), age_learned = col_character())) %>%
   mutate(sona_id = 1) %>%
-  relocate(sona_id, .before = rt)
+  relocate(sona_id, .before = rt) %>%
+  relocate(anything_else, .before = first_language)
 
-data = rbindlist(list(sona_data, other_data))
-```
-
-
-#explore the data
-```{r}
-nrow(data)
-ncol(data)
-data %>%
-  group_by(subject) %>%
-  count()
-data %>%
-  group_by(clue_type) %>%
-  count()
-data %>%
-  group_by(subject, clue_type) %>%
-  count()
+data = bind_rows(sona_data, other_data)
 ```
 
 # filter and select down to analyzable data
 ```{r}
 trials = data %>%
-  filter(type_of_trial == "experiment" | is_seen == 1)
-
-
-nrow(trials)
-ncol(trials)
-trials %>%
-  group_by(subject) %>%
-  count()
-trials %>%
-  group_by(clue_type) %>%
-  count()
-trials %>%
-  group_by(subject, clue_type) %>%
-  count()
-```
-
-# filter subjects with imperfect attention checks
-```{r}
-incorrect_attentions = trials %>%
-  mutate(adjusted_attention = ifelse(is_seen == 1, ifelse(stringdist(tolower(response), clue, method = "lv") < 2, 1, 0), 2)) %>%
-  filter(adjusted_attention == 0)
-
-incorrect_attentions = incorrect_attentions %>%
-  group_by(subject) %>%
-  count()%>%
-  # additional filter to remove only people who got more than 1 wrong
-  filter(n >1)
-
-trials = trials %>%
-  filter(!(subject %in% incorrect_attentions$subject))
-  # need to add here code to remove the singular incorrect attention trials
+  filter(type_of_trial == "experiment")
 ```
 
 # filter out subjects with incomplete data
 ```{r}
-trials_by_subject = trials %>%
+insufficient_trials = trials %>%
   group_by(subject) %>%
-  count()
-
-insufficient_trials = trials_by_subject %>%
-  filter(n < 66)
+  count() %>%
+  filter(n < 60)
 
 trials = trials %>%
   filter(!(subject %in% insufficient_trials$subject)) %>%
   filter(type_of_trial == "experiment")
 
-trials %>%
+trials_comparison = trials
+```
+
+# filter based on attention checks
+```{r}
+attn_checks = data %>%
+  filter(is_seen == 1) %>%
+  mutate(attn_corr = ifelse(is.na(response), 0, ifelse(stringdist(tolower(response), clue, method = "lv") < 2, 1, 0)))
+
+subject_attn = attn_checks %>%
   group_by(subject) %>%
+  summarise(n_correct = sum(attn_corr))
+
+insufficient_attentions = subject_attn %>%
+  filter(n_correct < 6)
+
+trials = trials %>%
+  filter(!(subject %in% insufficient_attentions$subject))
+```
+
+# demographic data
+```{r}
+demo = data %>%
+  filter(subject %in% trials$subject) %>%
+  filter(type_of_trial == "demographics" | type_of_trial == "not_english")
+
+# deal with age learned english
+not_english = demo %>%
+  filter(!is.na(first_language))
+
+first_language = not_english %>%
+  group_by(first_language) %>%
+  count()
+
+age_learned = not_english %>%
+  mutate(clean_age_learned = str_extract(age_learned, "\\d+\\.?\\d*") %>% 
+              as.numeric())
+
+al_av = age_learned %>%
+  filter(!is.na(clean_age_learned)) %>%
+  summarise(age_learned_average = mean(clean_age_learned))
+age_learned_av = al_av$age_learned_average[1]
+
+al_sd = age_learned %>%
+  filter(!is.na(clean_age_learned)) %>%
+  summarise(age_learned_stdev = sd(clean_age_learned))
+age_learned_sd = al_sd$age_learned_stdev[1]
+
+over_age_4 = age_learned %>%
+  filter(clean_age_learned > 4)
+n_over_age_4 = nrow(over_age_4)
+
+# trials = trials %>%
+#   filter(!(subject %in% over_age_4$subject))
+
+# final number subjects
+n_subjects = nrow(trials %>%
+  group_by(subject) %>%
+  count())
+
+# rest of demographics
+age_gen_ed = demo %>%
+  filter(!is.na(age)) %>%
+  filter(!str_detect(education, "[^[:digit:].]"))
+
+age_av = mean(age_gen_ed$age)
+age_sd = sd(age_gen_ed$age)
+
+education_av = mean(as.numeric(age_gen_ed$education))
+education_sd = sd(as.numeric(age_gen_ed$education))
+
+genders = age_gen_ed %>%
+  group_by(gender) %>%
+  count()
+
+race = demo %>%
+  filter(!is.na(race)) %>%
+  group_by(race) %>%
+  count()
+
+eth_hand_alert_eng = demo %>%
+  filter(!is.na(english))
+
+ethnicity = eth_hand_alert_eng %>%
+  group_by(ethnicity) %>%
+  count()
+
+hand = eth_hand_alert_eng %>%
+  group_by(hand) %>%
+  count()
+
+alert = eth_hand_alert_eng %>%
+  group_by(alert) %>%
+  count()
+
+english = eth_hand_alert_eng %>%
+  group_by(english) %>%
   count()
 ```
+
+#descriptives
+```{r}
+acc_by_subject = trials %>%
+  group_by(subject) %>%
+  summarise(av_acc = mean(accuracy))
+accuracy_av = mean(acc_by_subject$av_acc)
+accuracy_sd = sd(acc_by_subject$av_acc)
+
+acc_by_clues = trials %>%
+  group_by(clue_type) %>%
+  summarise(av_acc = mean(accuracy))
+ 
+c = trials %>%
+  rowwise() %>%
+  mutate(comma_count = str_count(all_responses, ",") + 1) %>%
+  select(all_responses, comma_count)
+n_words_av = mean(c$comma_count)
+rt_av = mean(as.numeric(trials$rt))/1000
+rt_sd = sd(as.numeric(trials$rt))/1000
+```
+
+# test if accuracy differs significantly by english age and attention checks
+```{r}
+# first we recompile english demographic data using trials_comparison
+
+demo_comparison = data %>%
+  filter(subject %in% trials_comparison$subject) %>%
+  filter(type_of_trial == "demographics" | type_of_trial == "not_english")
+
+not_english_comp = demo_comparison %>%
+  filter(!is.na(first_language))
+
+age_learned_comp = not_english_comp %>%
+  mutate(clean_age_learned = str_extract(age_learned, "\\d+\\.?\\d*") %>% 
+              as.numeric())
+
+age_before_after = age_learned_comp %>%
+  select(subject, clean_age_learned) %>%
+  filter(!(is.na(clean_age_learned))) %>%
+  mutate(bfr_aft = ifelse(clean_age_learned < 5, "before", "after"))
+
+# then we join average accuracy by subject with the groups they are in for when they learned english and how many attention checks they passed
+
+trials_comparison = trials_comparison %>%
+  group_by(subject) %>%
+  summarise(avg_acc = mean(accuracy))
+
+trials_comparison = left_join(trials_comparison, age_before_after, by = "subject") %>%
+  mutate(bfr_aft_all = ifelse(is.na(bfr_aft), "before", bfr_aft)) %>%
+  select(subject, avg_acc, bfr_aft_all)
+
+trials_comparison = left_join(trials_comparison, subject_attn, by = "subject") %>%
+  filter(n_correct == 5 | n_correct == 6)
+
+anova1 = aov(data = trials_comparison, avg_acc ~ bfr_aft_all * n_correct)
+summary(anova1)
+
+trials_comparison %>%
+  ggplot(aes(x = n_correct, y = avg_acc, group = bfr_aft_all, color = bfr_aft_all)) + 
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(x = "num correct", y = "avg accuracy", fill = "before/after")
+```
+
 
 # split accuracy into high and low
 ```{r}
@@ -151,25 +266,6 @@ MuMIn::r.squaredGLMM(glmer1)
 
 sjPlot::plot_model(glmer1, type = "int") + theme_few()
 ```
-
-#descriptives
-```{r}
-data %>%
-  group_by(subject) %>%
-  count()
-acc_by_subject = trials %>%
-  group_by(subject) %>%
-  summarise(av_acc = mean(accuracy))
-mean(acc_by_subject$av_acc)
-sd(acc_by_subject$av_acc)
- 
-c = trials %>%
-  rowwise() %>%
-  mutate(comma_count = str_count(all_responses, ",") + 1) %>%
-  select(all_responses, comma_count)
-mean(c$comma_count)
-```
-
 
 # split into guess1 and guess2
 ```{r}
@@ -225,6 +321,8 @@ models_2to16 = guessed_words %>% filter(budget < 16) %>%
      control = lmerControl(optimizer="bobyqa",optCtrl=list(maxfun=2000000)))
 
 MuMIn::r.squaredGLMM(models_2to16$model[[3]])
+
+summary(models_2to16$model[[3]])
 ```
 
 
