@@ -40,9 +40,13 @@ sona_data = read_csv("../data/behavioral/connector-ap-sona.csv", col_types = col
 other_data = read_csv("../data/behavioral/connector-ap.csv", col_types = cols(question_order = col_character(), race = col_character(), ethnicity = col_character(), hand = col_character(), alert = col_character(), anything_else = col_character(), english = col_character(), first_language = col_character(), age_learned = col_character())) %>%
   mutate(sona_id = 1) %>%
   relocate(sona_id, .before = rt) %>%
-  relocate(anything_else, .before = first_language)
+  relocate(anything_else, .before = first_language) %>%
+  mutate(education = str_extract(education, "\\d+\\.?\\d*") %>% 
+              as.numeric())
 
-data = bind_rows(sona_data, other_data)
+data = bind_rows(sona_data, other_data) %>%
+  mutate(education = str_extract(education, "\\d+\\.?\\d*") %>% 
+              as.numeric())
 ```
 
 # filter and select down to analyzable data
@@ -59,15 +63,19 @@ insufficient_trials = trials %>%
   filter(n < 60)
 
 trials = trials %>%
-  filter(!(subject %in% insufficient_trials$subject)) %>%
-  filter(type_of_trial == "experiment")
+  filter(!(subject %in% insufficient_trials$subject))
 
 trials_comparison = trials
+
+trials_comparison %>%
+  group_by(subject) %>%
+  count()
 ```
 
 # filter based on attention checks
 ```{r}
 attn_checks = data %>%
+  filter(subject %in% trials$subject) %>%
   filter(is_seen == 1) %>%
   mutate(attn_corr = ifelse(is.na(response), 0, ifelse(stringdist(tolower(response), clue, method = "lv") < 2, 1, 0)))
 
@@ -114,8 +122,11 @@ over_age_4 = age_learned %>%
   filter(clean_age_learned > 4)
 n_over_age_4 = nrow(over_age_4)
 
-# trials = trials %>%
-#   filter(!(subject %in% over_age_4$subject))
+trials = trials %>%
+  filter(!(subject %in% over_age_4$subject))
+
+demo = demo %>%
+  filter(subject %in% trials$subject)
 
 # final number subjects
 n_subjects = nrow(trials %>%
@@ -160,6 +171,12 @@ alert = eth_hand_alert_eng %>%
 english = eth_hand_alert_eng %>%
   group_by(english) %>%
   count()
+
+non_sona = trials %>%
+  filter(sona_id == 1) %>%
+  group_by(subject) %>%
+  count()
+nrow(non_sona)
 ```
 
 #descriptives
@@ -225,11 +242,12 @@ trials_comparison %>%
   labs(x = "num correct", y = "avg accuracy", fill = "before/after")
 ```
 
-
 # split accuracy into high and low
 ```{r}
 trials = trials %>%
   mutate(accessibility_categorical = ifelse(accessibility < mean(accessibility), "Low", "High"))
+trials = trials %>%
+  mutate(pragmatics_categorical = ifelse(pragmatics < mean(pragmatics), "Low", "High"))
 ```
 
 
@@ -252,6 +270,15 @@ trials = trials %>%
 ## partial model
 glmer1 = glmer(data = trials, accuracy ~ center_p*center_a + (center_p |subject) + (center_p |words), family = "binomial")
 
+# trials_comparison = trials_comparison %>%
+#   mutate(center_a = as.numeric(scale(accessibility, center = TRUE, scale = TRUE)),
+#          center_p = as.numeric(scale(pragmatics, center = TRUE, scale= TRUE)))
+# 
+# ## partial model
+# glmer1_comp = glmer(data = trials_comparison, accuracy ~ center_p*center_a + (center_p |subject) + (center_p |words), family = "binomial")
+
+# summary(glmer1_comp)
+
 ## full model
 #glmer1 = glmer(data = trials, accuracy ~ center_p*center_a + (center_p*center_a|subject) + (center_p*center_a|words), family = "binomial")
 
@@ -264,8 +291,39 @@ MuMIn::r.squaredGLMM(glmer1)
 
 ## plot predicted plot from model
 
-sjPlot::plot_model(glmer1, type = "int") + theme_few()
+sjPlot::plot_model(glmer1, type = "int", legend.title = "Accessibility", main = "ab") + 
+  xlab("Pragmatics") +
+  ylab("Accuracy") + 
+  theme_few() + 
+  ggtitle("")
 ```
+
+# examine properties of the clues
+```{r}
+trials_by_clue = trials %>%
+  group_by(clue) %>%
+  summarise(prags = mean(center_p), accs = mean(center_a), accuracy = mean(accuracy))
+
+clues_by_prag = trials_by_clue %>%
+  arrange(prags)
+
+clues_by_accu = trials_by_clue %>%
+  arrange(accuracy)
+
+clues_by_accs = trials_by_clue %>%
+  arrange(accs)
+
+hist(trials_by_clue$accs)
+hist(trials_by_clue$prags)
+
+cor.test(trials_by_clue$prags, trials_by_clue$accs)
+trials_by_clue %>%
+  ggplot(aes(x = prags, y = accs)) + 
+  geom_point() + 
+  labs(x = "Pragmatics", y = "Accessibility") +
+  theme_few()
+```
+
 
 # split into guess1 and guess2
 ```{r}
@@ -311,18 +369,26 @@ guessed_words = guessed_words %>%
 # conduct lmer with visit_counts predicting probability, random slopes and intercepts at the word level (since visit counts are for guesses not clues)
 
 guessed_words %>%
-  ggplot(aes(x = visit_count, y = probability, group = budget, color = budget)) +
+  ggplot(aes(x = visit_count, y = probability, group = as.factor(budget), color = as.factor(budget))) +
   geom_smooth(method = "lm") + 
+  labs(x = "Accessibility", y = "Guess Probability", color = "Budget") +
   theme_few()
 
-models_2to16 = guessed_words %>% filter(budget < 16) %>%
+models_2to16 = guessed_words %>% filter(budget < 33) %>%
   group_by(budget) %>%
   do(model = lmer(data = ., probability ~ visit_count + (visit_count|word)), 
      control = lmerControl(optimizer="bobyqa",optCtrl=list(maxfun=2000000)))
 
 MuMIn::r.squaredGLMM(models_2to16$model[[3]])
 
+summary(models_2to16$model[[1]])
+summary(models_2to16$model[[2]])
 summary(models_2to16$model[[3]])
+summary(models_2to16$model[[4]])
+summary(models_2to16$model[[5]])
+
+fixed_effects_32 = fixef(models_2to16$model[[5]])
+probs_32 = exp(fixed_effects_32)/(1+exp(fixed_effects_32))
 ```
 
 
