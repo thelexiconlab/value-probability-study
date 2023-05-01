@@ -341,6 +341,14 @@ trials_by_clue %>%
   geom_point() + 
   labs(x = "Pragmatics", y = "Accessibility") +
   theme_few()
+
+## VIOLIN PLOT
+trials %>%
+ggplot(aes(x=pragmatics_categorical, y=accessibility, fill = pragmatics_categorical)) + 
+  geom_violin(trim=FALSE) +
+  geom_boxplot(width=0.1) +
+  theme_few()
+
 ```
 
 
