@@ -237,7 +237,7 @@ anova1 = aov(data = trials_comparison, avg_acc ~ bfr_aft_all * n_correct)
 summary(anova1)
 
 trials_comparison %>%
-  ggplot(aes(x = n_correct, y = avg_acc, group = bfr_aft_all, color = bfr_aft_all)) + 
+  ggplot(aes(x = n_correct, y = avg_acc, group = bfr_aft_all, fill = bfr_aft_all)) + 
   geom_bar(stat = "identity", position = "dodge") +
   labs(x = "num correct", y = "avg accuracy", fill = "before/after")
 ```
@@ -268,7 +268,7 @@ trials = trials %>%
          center_p = as.numeric(scale(pragmatics, center = TRUE, scale= TRUE)))
 
 ## partial model
-glmer1 = glmer(data = trials, accuracy ~ center_p*center_a + (center_p |subject) + (center_p |words), family = "binomial")
+# glmer1 = glmer(data = trials, accuracy ~ center_p*center_a + (center_p |subject) + (center_p |words), family = "binomial")
 
 # trials_comparison = trials_comparison %>%
 #   mutate(center_a = as.numeric(scale(accessibility, center = TRUE, scale = TRUE)),
@@ -279,15 +279,16 @@ glmer1 = glmer(data = trials, accuracy ~ center_p*center_a + (center_p |subject)
 
 # summary(glmer1_comp)
 
-## full model
-#glmer1 = glmer(data = trials, accuracy ~ center_p*center_a + (center_p*center_a|subject) + (center_p*center_a|words), family = "binomial")
+# full model: THIS IS THE FINAL MODEL YOU SHOULD REPORT!
+glmer1 = glmer(data = trials, accuracy ~ center_p*center_a + (center_a*center_a|subject) + (center_p*center_a|words),
+               family = "binomial", control = glmerControl(check.conv.singular = .makeCC(action = "ignore",  tol = 1e-4),
+                           optimizer ='bobyqa'))
 
 fixed_effects = fixef(glmer1)
 probs = exp(fixed_effects)/(1+exp(fixed_effects))
 
 summary(glmer1)
 car::Anova(glmer1)
-MuMIn::r.squaredGLMM(glmer1)
 
 ## plot predicted plot from model
 
@@ -296,6 +297,24 @@ sjPlot::plot_model(glmer1, type = "int", legend.title = "Accessibility", main = 
   ylab("Accuracy") + 
   theme_few() + 
   ggtitle("")
+```
+
+
+## two-way ANOVA (for final presentation)
+```{r}
+library(rstatix)
+anova_data = trials %>% select(subject, words, accuracy, clue_type) %>%
+  separate(clue_type, into = c("a_level", "a", "p_level", "p")) %>%
+  group_by(subject, a_level, p_level) %>%
+  summarise(mean_acc = mean(accuracy)) %>%
+  convert_as_factor(subject, a_level, p_level) %>% ungroup()
+
+res.aov <- anova_test(
+  data = anova_data, dv = mean_acc, wid = subject,
+  within = c(a_level, p_level)
+  )
+
+get_anova_table(res.aov)
 ```
 
 # examine properties of the clues
@@ -386,9 +405,6 @@ summary(models_2to16$model[[2]])
 summary(models_2to16$model[[3]])
 summary(models_2to16$model[[4]])
 summary(models_2to16$model[[5]])
-
-fixed_effects_32 = fixef(models_2to16$model[[5]])
-probs_32 = exp(fixed_effects_32)/(1+exp(fixed_effects_32))
 ```
 
 
