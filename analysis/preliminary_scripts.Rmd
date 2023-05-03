@@ -401,18 +401,24 @@ guessed_words %>%
   labs(x = "Accessibility", y = "Guess Probability", color = "Budget") +
   theme_few()
 
-models_2to16 = guessed_words %>% filter(budget < 33) %>%
+
+models_overall = guessed_words %>% 
   group_by(budget) %>%
-  do(model = lmer(data = ., probability ~ visit_count + (visit_count|word)), 
-     control = lmerControl(optimizer="bobyqa",optCtrl=list(maxfun=2000000)))
+  mutate(scaled_visit = as.numeric(scale(visit_count, center=TRUE, scale =TRUE))) %>%
+  do(model = lmer(data = ., probability ~ scaled_visit + (scaled_visit|word)),
+     control = lmerControl(optimizer ='optimx', optCtrl=list(method='nlminb')))
 
-MuMIn::r.squaredGLMM(models_2to16$model[[3]])
+MuMIn::r.squaredGLMM(models_overall$model[[1]])
+MuMIn::r.squaredGLMM(models_overall$model[[2]])
+MuMIn::r.squaredGLMM(models_overall$model[[3]])
+MuMIn::r.squaredGLMM(models_overall$model[[4]])
+MuMIn::r.squaredGLMM(models_overall$model[[5]])
 
-summary(models_2to16$model[[1]])
-summary(models_2to16$model[[2]])
-summary(models_2to16$model[[3]])
-summary(models_2to16$model[[4]])
-summary(models_2to16$model[[5]])
+summary(models_overall$model[[1]])
+summary(models_overall$model[[2]])
+summary(models_overall$model[[3]])
+summary(models_overall$model[[4]])
+summary(models_overall$model[[5]])
 ```
 
 
