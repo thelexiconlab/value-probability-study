@@ -390,19 +390,19 @@ guess_accessibility = read_csv("../data/stimuli/guess_visit_counts.csv")
 
 # join accessibility with word counts
 ```{r}
-guessed_words = guessed_words %>%
+guessed_words_accessibility = guessed_words %>%
   left_join(guess_accessibility)
 
 # conduct lmer with visit_counts predicting probability, random slopes and intercepts at the word level (since visit counts are for guesses not clues)
 
-guessed_words %>%
+guessed_words_accessibility %>%
   ggplot(aes(x = visit_count, y = probability, group = as.factor(budget), color = as.factor(budget))) +
   geom_smooth(method = "lm") + 
   labs(x = "Accessibility", y = "Guess Probability", color = "Budget") +
   theme_few()
 
 
-models_overall = guessed_words %>% 
+models_overall = guessed_words_accessibility %>% 
   group_by(budget) %>%
   mutate(scaled_visit = as.numeric(scale(visit_count, center=TRUE, scale =TRUE))) %>%
   do(model = lmer(data = ., probability ~ scaled_visit + (scaled_visit|word)),
@@ -421,5 +421,43 @@ summary(models_overall$model[[4]])
 summary(models_overall$model[[5]])
 ```
 
+# are guessers pragmatic?
+
+```{r}
+model_pragmatics = read_csv('../data/stimuli/guess_scores.csv')
+
+guessed_words_pragmatics_1 = x %>% mutate(guess = paste(guess1, guess2, sep = "-")) %>%
+  select(clue, guess, words) %>% left_join(model_pragmatics) %>% filter(!is.na(wordpair))
+
+# now we need the reverse pairs as well
+
+guessed_words_pragmatics_2 = x %>% mutate(guess = paste(guess2, guess1, sep = "-")) %>%
+  select(clue, guess, words) %>% left_join(model_pragmatics) %>% filter(!is.na(wordpair))
+
+guessed_words_pragmatics = rbind(guessed_words_pragmatics_1, guessed_words_pragmatics_2)
+  
+## need to find probability of guessing
+
+clue_counts = guessed_words_pragmatics %>% group_by(clue) %>% count()
+guess_counts = guessed_words_pragmatics %>% group_by(clue, guess) %>% count() %>% rename(guess_count = n) %>%
+  left_join(clue_counts) %>% mutate(probability = guess_count/n)  %>% left_join(guessed_words_pragmatics) 
+
+guess_counts_long = guess_counts %>%
+  pivot_longer(names_to = "model", cols = c(literal_score, pragmatic_score))
+
+pragmatic_models_overall = guess_counts_long %>% 
+  group_by(model) %>%
+  mutate(scaled_value = as.numeric(scale(value, center=TRUE, scale =TRUE))) %>%
+  do(model = lmer(data = ., probability ~ scaled_value + (scaled_value|clue)),
+     control = lmerControl(optimizer ='optimx', optCtrl=list(method='nlminb')))
+
+summary(pragmatic_models_overall$model[[1]])
+summary(pragmatic_models_overall$model[[2]])
+
+MuMIn::r.squaredGLMM(pragmatic_models_overall$model[[1]])
+MuMIn::r.squaredGLMM(pragmatic_models_overall$model[[2]])
+
+
+```
 
 
