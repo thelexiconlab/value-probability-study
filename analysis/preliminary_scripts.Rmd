@@ -19,6 +19,8 @@ date: "2023-04-05"
 # load packages
 ```{r}
 library(tidyverse)
+library(car)
+library(readr)
 library(ggplot2)
 library(ggthemes)
 library(stringdist)
@@ -29,92 +31,223 @@ library(Hmisc)
 library(psych)
 library(broom)
 library(data.table)
+library(MuMIn)
 ```
 
 # import data from two sources
 ```{r}
-sona_data = read_csv("../data/behavioral/connector-ap-sona.csv")
-other_data = read_csv("../data/behavioral/connector-ap.csv")%>%
+sona_data = read_csv("../data/behavioral/connector-ap-sona.csv", col_types = cols(question_order = col_character(), race = col_character(), ethnicity = col_character(), hand = col_character(), alert = col_character(), anything_else = col_character(), english = col_character(), first_language = col_character(), age_learned = col_character()))
+other_data = read_csv("../data/behavioral/connector-ap.csv", col_types = cols(question_order = col_character(), race = col_character(), ethnicity = col_character(), hand = col_character(), alert = col_character(), anything_else = col_character(), english = col_character(), first_language = col_character(), age_learned = col_character())) %>%
   mutate(sona_id = 1) %>%
-  relocate(sona_id, .before = rt)
+  relocate(sona_id, .before = rt) %>%
+  relocate(anything_else, .before = first_language) %>%
+  mutate(education = str_extract(education, "\\d+\\.?\\d*") %>% 
+              as.numeric())
 
-data = rbindlist(list(sona_data, other_data))
-```
-
-
-#explore the data
-```{r}
-nrow(data)
-ncol(data)
-data %>%
-  group_by(subject) %>%
-  count()
-data %>%
-  group_by(clue_type) %>%
-  count()
-data %>%
-  group_by(subject, clue_type) %>%
-  count()
+data = bind_rows(sona_data, other_data) %>%
+  mutate(education = str_extract(education, "\\d+\\.?\\d*") %>% 
+              as.numeric())
 ```
 
 # filter and select down to analyzable data
 ```{r}
 trials = data %>%
-  filter(type_of_trial == "experiment" | is_seen == 1)
-
-
-nrow(trials)
-ncol(trials)
-trials %>%
-  group_by(subject) %>%
-  count()
-trials %>%
-  group_by(clue_type) %>%
-  count()
-trials %>%
-  group_by(subject, clue_type) %>%
-  count()
-```
-
-# filter subjects with imperfect attention checks
-```{r}
-incorrect_attentions = trials %>%
-  mutate(adjusted_attention = ifelse(is_seen == 1, ifelse(stringdist(tolower(response), clue, method = "lv") < 2, 1, 0), 2)) %>%
-  filter(adjusted_attention == 0)
-
-incorrect_attentions = incorrect_attentions %>%
-  group_by(subject) %>%
-  count()%>%
-  # additional filter to remove only people who got more than 1 wrong
-  filter(n >1)
-
-trials = trials %>%
-  filter(!(subject %in% incorrect_attentions$subject))
-  # need to add here code to remove the singular incorrect attention trials
+  filter(type_of_trial == "experiment")
 ```
 
 # filter out subjects with incomplete data
 ```{r}
-trials_by_subject = trials %>%
+insufficient_trials = trials %>%
   group_by(subject) %>%
-  count()
-
-insufficient_trials = trials_by_subject %>%
-  filter(n < 66)
+  count() %>%
+  filter(n < 60)
 
 trials = trials %>%
-  filter(!(subject %in% insufficient_trials$subject)) %>%
-  filter(type_of_trial == "experiment")
+  filter(!(subject %in% insufficient_trials$subject))
 
-trials %>%
+trials_comparison = trials
+
+trials_comparison %>%
   group_by(subject) %>%
   count()
+```
+
+# filter based on attention checks
+```{r}
+attn_checks = data %>%
+  filter(subject %in% trials$subject) %>%
+  filter(is_seen == 1) %>%
+  mutate(attn_corr = ifelse(is.na(response), 0, ifelse(stringdist(tolower(response), clue, method = "lv") < 2, 1, 0)))
+
+subject_attn = attn_checks %>%
+  group_by(subject) %>%
+  summarise(n_correct = sum(attn_corr))
+
+insufficient_attentions = subject_attn %>%
+  filter(n_correct < 6)
+
+trials = trials %>%
+  filter(!(subject %in% insufficient_attentions$subject))
+```
+
+# demographic data
+```{r}
+demo = data %>%
+  filter(subject %in% trials$subject) %>%
+  filter(type_of_trial == "demographics" | type_of_trial == "not_english")
+
+# deal with age learned english
+not_english = demo %>%
+  filter(!is.na(first_language))
+
+first_language = not_english %>%
+  group_by(first_language) %>%
+  count()
+
+age_learned = not_english %>%
+  mutate(clean_age_learned = str_extract(age_learned, "\\d+\\.?\\d*") %>% 
+              as.numeric())
+
+al_av = age_learned %>%
+  filter(!is.na(clean_age_learned)) %>%
+  summarise(age_learned_average = mean(clean_age_learned))
+age_learned_av = al_av$age_learned_average[1]
+
+al_sd = age_learned %>%
+  filter(!is.na(clean_age_learned)) %>%
+  summarise(age_learned_stdev = sd(clean_age_learned))
+age_learned_sd = al_sd$age_learned_stdev[1]
+
+over_age_4 = age_learned %>%
+  filter(clean_age_learned > 4)
+n_over_age_4 = nrow(over_age_4)
+
+trials = trials %>%
+  filter(!(subject %in% over_age_4$subject))
+
+demo = demo %>%
+  filter(subject %in% trials$subject)
+
+# final number subjects
+n_subjects = nrow(trials %>%
+  group_by(subject) %>%
+  count())
+
+# rest of demographics
+age_gen_ed = demo %>%
+  filter(!is.na(age)) %>%
+  filter(!str_detect(education, "[^[:digit:].]"))
+
+age_av = mean(age_gen_ed$age)
+age_sd = sd(age_gen_ed$age)
+
+education_av = mean(as.numeric(age_gen_ed$education))
+education_sd = sd(as.numeric(age_gen_ed$education))
+
+genders = age_gen_ed %>%
+  group_by(gender) %>%
+  count()
+
+race = demo %>%
+  filter(!is.na(race)) %>%
+  group_by(race) %>%
+  count()
+
+eth_hand_alert_eng = demo %>%
+  filter(!is.na(english))
+
+ethnicity = eth_hand_alert_eng %>%
+  group_by(ethnicity) %>%
+  count()
+
+hand = eth_hand_alert_eng %>%
+  group_by(hand) %>%
+  count()
+
+alert = eth_hand_alert_eng %>%
+  group_by(alert) %>%
+  count()
+
+english = eth_hand_alert_eng %>%
+  group_by(english) %>%
+  count()
+
+non_sona = trials %>%
+  filter(sona_id == 1) %>%
+  group_by(subject) %>%
+  count()
+nrow(non_sona)
+```
+
+#descriptives
+```{r}
+acc_by_subject = trials %>%
+  group_by(subject) %>%
+  summarise(av_acc = mean(accuracy))
+accuracy_av = mean(acc_by_subject$av_acc)
+accuracy_sd = sd(acc_by_subject$av_acc)
+
+acc_by_clues = trials %>%
+  group_by(clue_type) %>%
+  summarise(av_acc = mean(accuracy))
+ 
+c = trials %>%
+  rowwise() %>%
+  mutate(comma_count = str_count(all_responses, ",") + 1) %>%
+  select(all_responses, comma_count)
+n_words_av = mean(c$comma_count)
+rt_av = mean(as.numeric(trials$rt))/1000
+rt_sd = sd(as.numeric(trials$rt))/1000
+```
+
+# test if accuracy differs significantly by english age and attention checks
+```{r}
+# first we recompile english demographic data using trials_comparison
+
+demo_comparison = data %>%
+  filter(subject %in% trials_comparison$subject) %>%
+  filter(type_of_trial == "demographics" | type_of_trial == "not_english")
+
+not_english_comp = demo_comparison %>%
+  filter(!is.na(first_language))
+
+age_learned_comp = not_english_comp %>%
+  mutate(clean_age_learned = str_extract(age_learned, "\\d+\\.?\\d*") %>% 
+              as.numeric())
+
+age_before_after = age_learned_comp %>%
+  select(subject, clean_age_learned) %>%
+  filter(!(is.na(clean_age_learned))) %>%
+  mutate(bfr_aft = ifelse(clean_age_learned < 5, "before", "after"))
+
+# then we join average accuracy by subject with the groups they are in for when they learned english and how many attention checks they passed
+
+trials_comparison = trials_comparison %>%
+  group_by(subject) %>%
+  summarise(avg_acc = mean(accuracy))
+
+trials_comparison = left_join(trials_comparison, age_before_after, by = "subject") %>%
+  mutate(bfr_aft_all = ifelse(is.na(bfr_aft), "before", bfr_aft)) %>%
+  select(subject, avg_acc, bfr_aft_all)
+
+trials_comparison = left_join(trials_comparison, subject_attn, by = "subject") %>%
+  filter(n_correct == 5 | n_correct == 6)
+
+anova1 = aov(data = trials_comparison, avg_acc ~ bfr_aft_all * n_correct)
+summary(anova1)
+
+trials_comparison %>%
+  ggplot(aes(x = n_correct, y = avg_acc, group = bfr_aft_all, fill = bfr_aft_all)) + 
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(x = "num correct", y = "avg accuracy", fill = "before/after")
 ```
 
 # split accuracy into high and low
 ```{r}
 trials = trials %>%
   mutate(accessibility_categorical = ifelse(accessibility < mean(accessibility), "Low", "High"))
+trials = trials %>%
+  mutate(pragmatics_categorical = ifelse(pragmatics < mean(pragmatics), "Low", "High"))
 ```
 
 
@@ -135,39 +268,87 @@ trials = trials %>%
          center_p = as.numeric(scale(pragmatics, center = TRUE, scale= TRUE)))
 
 ## partial model
-glmer1 = glmer(data = trials, accuracy ~ center_p*center_a + (center_p |subject) + (center_p |words), family = "binomial")
+# glmer1 = glmer(data = trials, accuracy ~ center_p*center_a + (center_p |subject) + (center_p |words), family = "binomial")
 
-## full model
-#glmer1 = glmer(data = trials, accuracy ~ center_p*center_a + (center_p*center_a|subject) + (center_p*center_a|words), family = "binomial")
+# trials_comparison = trials_comparison %>%
+#   mutate(center_a = as.numeric(scale(accessibility, center = TRUE, scale = TRUE)),
+#          center_p = as.numeric(scale(pragmatics, center = TRUE, scale= TRUE)))
+# 
+# ## partial model
+# glmer1_comp = glmer(data = trials_comparison, accuracy ~ center_p*center_a + (center_p |subject) + (center_p |words), family = "binomial")
+
+# summary(glmer1_comp)
+
+# full model: THIS IS THE FINAL MODEL YOU SHOULD REPORT!
+glmer1 = glmer(data = trials, accuracy ~ center_p*center_a + (center_a*center_a|subject) + (center_p*center_a|words),
+               family = "binomial", control = glmerControl(check.conv.singular = .makeCC(action = "ignore",  tol = 1e-4),
+                           optimizer ='bobyqa'))
 
 fixed_effects = fixef(glmer1)
 probs = exp(fixed_effects)/(1+exp(fixed_effects))
 
 summary(glmer1)
 car::Anova(glmer1)
-MuMIn::r.squaredGLMM(glmer1)
 
 ## plot predicted plot from model
 
-sjPlot::plot_model(glmer1, type = "int") + theme_few()
+sjPlot::plot_model(glmer1, type = "int", legend.title = "Accessibility", main = "ab") + 
+  xlab("Pragmatics") +
+  ylab("Accuracy") + 
+  theme_few() + 
+  ggtitle("")
 ```
 
-#descriptives
+
+## two-way ANOVA (for final presentation)
 ```{r}
-data %>%
-  group_by(subject) %>%
-  count()
-acc_by_subject = trials %>%
-  group_by(subject) %>%
-  summarise(av_acc = mean(accuracy))
-mean(acc_by_subject$av_acc)
-sd(acc_by_subject$av_acc)
- 
-c = trials %>%
-  rowwise() %>%
-  mutate(comma_count = str_count(all_responses, ",") + 1) %>%
-  select(all_responses, comma_count)
-mean(c$comma_count)
+library(rstatix)
+anova_data = trials %>% select(subject, words, accuracy, clue_type) %>%
+  separate(clue_type, into = c("a_level", "a", "p_level", "p")) %>%
+  group_by(subject, a_level, p_level) %>%
+  summarise(mean_acc = mean(accuracy)) %>%
+  convert_as_factor(subject, a_level, p_level) %>% ungroup()
+
+res.aov <- anova_test(
+  data = anova_data, dv = mean_acc, wid = subject,
+  within = c(a_level, p_level)
+  )
+
+get_anova_table(res.aov)
+```
+
+# examine properties of the clues
+```{r}
+trials_by_clue = trials %>%
+  group_by(clue) %>%
+  summarise(prags = mean(center_p), accs = mean(center_a), accuracy = mean(accuracy))
+
+clues_by_prag = trials_by_clue %>%
+  arrange(prags)
+
+clues_by_accu = trials_by_clue %>%
+  arrange(accuracy)
+
+clues_by_accs = trials_by_clue %>%
+  arrange(accs)
+
+hist(trials_by_clue$accs)
+hist(trials_by_clue$prags)
+
+cor.test(trials_by_clue$prags, trials_by_clue$accs)
+trials_by_clue %>%
+  ggplot(aes(x = prags, y = accs)) + 
+  geom_point() + 
+  labs(x = "Pragmatics", y = "Accessibility") +
+  theme_few()
+
+## VIOLIN PLOT
+trials %>%
+ggplot(aes(x=pragmatics_categorical, y=accessibility, fill = pragmatics_categorical)) + 
+  geom_violin(trim=FALSE) +
+  geom_boxplot(width=0.1) +
+  theme_few()
+
 ```
 
 
@@ -209,23 +390,74 @@ guess_accessibility = read_csv("../data/stimuli/guess_visit_counts.csv")
 
 # join accessibility with word counts
 ```{r}
-guessed_words = guessed_words %>%
+guessed_words_accessibility = guessed_words %>%
   left_join(guess_accessibility)
 
 # conduct lmer with visit_counts predicting probability, random slopes and intercepts at the word level (since visit counts are for guesses not clues)
 
-guessed_words %>%
-  ggplot(aes(x = visit_count, y = probability, group = budget, color = budget)) +
+guessed_words_accessibility %>%
+  ggplot(aes(x = visit_count, y = probability, group = as.factor(budget), color = as.factor(budget))) +
   geom_smooth(method = "lm") + 
+  labs(x = "Accessibility", y = "Guess Probability", color = "Budget") +
   theme_few()
 
-models_2to16 = guessed_words %>% filter(budget < 16) %>%
-  group_by(budget) %>%
-  do(model = lmer(data = ., probability ~ visit_count + (visit_count|word)), 
-     control = lmerControl(optimizer="bobyqa",optCtrl=list(maxfun=2000000)))
 
-MuMIn::r.squaredGLMM(models_2to16$model[[3]])
+models_overall = guessed_words_accessibility %>% 
+  group_by(budget) %>%
+  mutate(scaled_visit = as.numeric(scale(visit_count, center=TRUE, scale =TRUE))) %>%
+  do(model = lmer(data = ., probability ~ scaled_visit + (scaled_visit|word)),
+     control = lmerControl(optimizer ='optimx', optCtrl=list(method='nlminb')))
+
+MuMIn::r.squaredGLMM(models_overall$model[[1]])
+MuMIn::r.squaredGLMM(models_overall$model[[2]])
+MuMIn::r.squaredGLMM(models_overall$model[[3]])
+MuMIn::r.squaredGLMM(models_overall$model[[4]])
+MuMIn::r.squaredGLMM(models_overall$model[[5]])
+
+summary(models_overall$model[[1]])
+summary(models_overall$model[[2]])
+summary(models_overall$model[[3]])
+summary(models_overall$model[[4]])
+summary(models_overall$model[[5]])
 ```
 
+# are guessers pragmatic?
+
+```{r}
+model_pragmatics = read_csv('../data/stimuli/guess_scores.csv')
+
+guessed_words_pragmatics_1 = x %>% mutate(guess = paste(guess1, guess2, sep = "-")) %>%
+  select(clue, guess, words) %>% left_join(model_pragmatics) %>% filter(!is.na(wordpair))
+
+# now we need the reverse pairs as well
+
+guessed_words_pragmatics_2 = x %>% mutate(guess = paste(guess2, guess1, sep = "-")) %>%
+  select(clue, guess, words) %>% left_join(model_pragmatics) %>% filter(!is.na(wordpair))
+
+guessed_words_pragmatics = rbind(guessed_words_pragmatics_1, guessed_words_pragmatics_2)
+  
+## need to find probability of guessing
+
+clue_counts = guessed_words_pragmatics %>% group_by(clue) %>% count()
+guess_counts = guessed_words_pragmatics %>% group_by(clue, guess) %>% count() %>% rename(guess_count = n) %>%
+  left_join(clue_counts) %>% mutate(probability = guess_count/n)  %>% left_join(guessed_words_pragmatics) 
+
+guess_counts_long = guess_counts %>%
+  pivot_longer(names_to = "model", cols = c(literal_score, pragmatic_score))
+
+pragmatic_models_overall = guess_counts_long %>% 
+  group_by(model) %>%
+  mutate(scaled_value = as.numeric(scale(value, center=TRUE, scale =TRUE))) %>%
+  do(model = lmer(data = ., probability ~ scaled_value + (scaled_value|clue)),
+     control = lmerControl(optimizer ='optimx', optCtrl=list(method='nlminb')))
+
+summary(pragmatic_models_overall$model[[1]])
+summary(pragmatic_models_overall$model[[2]])
+
+MuMIn::r.squaredGLMM(pragmatic_models_overall$model[[1]])
+MuMIn::r.squaredGLMM(pragmatic_models_overall$model[[2]])
+
+
+```
 
 

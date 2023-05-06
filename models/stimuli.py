@@ -51,7 +51,7 @@ class boards:
       all_words = list(vocab.Word)
 
       main_words = [w for w in all_words if (len(w) < 15) & (len(w) > 2) & (' ' not in w) & (w[0].islower()) & (w.isalpha())]
-      taboo_words = pd.read_csv("../data/taboo.csv").word_list.values
+      taboo_words = pd.read_csv("../data/stimuli/taboo.csv").word_list.values
       
       main_words = [w for w in main_words if w not in taboo_words]
       #print(set(all_words) ^ set(main_words))
@@ -72,7 +72,7 @@ class boards:
       # also remove words that are within edit distance of 3 or less from the targets
       final_list = [w for w in final_list if (edit_distance(w1,w)>3) & (edit_distance(w2,w)>3)]
       # also remove words that are targets or distractors
-      targets = pd.read_csv('../data/targets.csv')
+      targets = pd.read_csv('../data/stimuli/targets.csv')
       targets = list(targets.Word1) + list(targets.Word2) + list(targets.distractor)
       #print("not in:", targets)
       final_list = [w for w in final_list if w not in targets]
@@ -127,7 +127,7 @@ class boards:
       final_list = [w for w in final_list if (edit_distance(w1,w)>3) & (edit_distance(w2,w)>3)]
       print("size after excluding edit dist w1w2=", len(final_list))
       # also remove words that are targets or distractors
-      targets = pd.read_csv('../data/targets.csv')
+      targets = pd.read_csv('../data/stimuli/targets.csv')
       targets = list(targets.Word1) + list(targets.Word2) + list(targets.distractor)
       #print("not in:", targets)
       final_list = [w for w in final_list if w not in targets]
@@ -159,14 +159,14 @@ class boards:
       ## remove taboo words + extra long words
 
       main_words = [w for w in after_subwords_list_1 if (len(w) < 15) & (len(w) > 2) & (' ' not in w) & (w[0].islower()) & (w.isalpha())]
-      taboo_words = pd.read_csv("../data/taboo.csv").word_list.values
+      taboo_words = pd.read_csv("../data/stimuli/taboo.csv").word_list.values
       
       main_words = [w for w in main_words if w not in taboo_words]
       print("size after excluding taboo=", len(main_words))
 
       ## need asome additional exclusions where board words are also not included
 
-      with open('../data/boards.json') as json_file:
+      with open('../data/stimuli/boards.json') as json_file:
         final_boards = json.load(json_file)
       
       blist = final_boards.values()
@@ -181,7 +181,7 @@ class boards:
       '''
       wordpair_list is a list of lists [[w1,w2], [w1,w2]]
       '''
-      target_df = pd.read_csv("../data/targets.csv")
+      target_df = pd.read_csv("../data/stimuli/targets.csv")
       for index,row in target_df.iterrows():
         w1 = row["Word1"]
         w2 = row["Word2"]
@@ -210,7 +210,7 @@ class boards:
       # reduce this to our acceptable word list 
       print(f"original {len(words)}")
       
-      targets = pd.read_csv('../data/targets.csv')
+      targets = pd.read_csv('../data/stimuli/targets.csv')
       current_n = len(targets)
       while(current_n <= n):
         final_list = boards.exclusions_for_wordpairs(words)
@@ -219,11 +219,11 @@ class boards:
         final_words = random.sample(final_list, 1)
         df = pd.DataFrame(final_words, columns = ['Word1', 'Word2'])
         
-        new_target_df = pd.read_csv("../data/targets.csv")
+        new_target_df = pd.read_csv("../data/stimuli/targets.csv")
         final_target_df = pd.concat([new_target_df, df])
-        final_target_df.to_csv('../data/targets.csv', index=False)
+        final_target_df.to_csv('../data/stimuli/targets.csv', index=False)
         
-        targets = pd.read_csv('../data/targets.csv')
+        targets = pd.read_csv('../data/stimuli/targets.csv')
         current_n = len(targets)
         
     
@@ -304,7 +304,7 @@ class boards:
             distractor, far_words = boards.generate_distractor(w1, w2, embeddings, vocab, 50, all_words)
             new_target_df["distractor"] = distractor
             final_target_df = pd.concat([final_target_df, new_target_df])
-            final_target_df.to_csv('../data/targets.csv', index=False)
+            final_target_df.to_csv('../data/stimuli/targets.csv', index=False)
             print(f"distractor for {wordpair} is {distractor}")
 
             # print("far words length=", len(far_words))
@@ -320,7 +320,7 @@ class boards:
             final_boards[wordpair] = twenty
             print("board is=", twenty)
         
-        with open('../data/boards.json', 'w') as f:
+        with open('../data/stimuli/boards.json', 'w') as f:
             json.dump(final_boards, f)   
       
     def boardjson_to_csv(path):
@@ -340,11 +340,11 @@ class RSA:
     '''
     initialize with embeddings & board matrices
     '''
-    with open('../data/boards.json') as json_file:
+    with open('../data/stimuli/boards.json') as json_file:
       self.final_boards = json.load(json_file)
     
-    self.vocab = pd.read_csv("../data/vocab.csv")
-    self.embeddings = pd.read_csv("../data/swow_associative_embeddings.csv").transpose().values
+    self.vocab = pd.read_csv("../data/stimuli/vocab.csv")
+    self.embeddings = pd.read_csv("../data/stimuli/swow_associative_embeddings.csv").transpose().values
     self.candidates = list(self.vocab.Word)
     self.create_all_boards_matrices()
   
@@ -437,7 +437,7 @@ class RSA:
     boardmatrix = self.board_matrices[board_name]
     return softmax(beta*boardmatrix, axis=0)
 
-  def pragmatic_speaker(self, board_name, beta):
+  def pragmatic_speaker(self, board_name, beta = 200):
     '''
     inputs:
     (1) board name ("e1_board1_words")
@@ -460,7 +460,7 @@ class RSA:
     obtains literal and pragmatic guesser scores for a given clue/board
     '''
     print("inside guess scores")
-    self.clues_df = pd.read_csv(f"../data/clues_final.csv".format())
+    self.clues_df = pd.read_csv(f"../data/stimuli/clues_final.csv".format())
     guess_scores = pd.DataFrame()
 
     for wordpair, board in self.final_boards.items():
@@ -499,19 +499,19 @@ class RSA:
       guess_df1 = pd.DataFrame({"guess": wordpairs_in_order })
       guess_df1["clue"] = list(specific_clue_df.high_a_high_p_clue)[0]
       guess_df1["literal_score"] = l_high_a_high_p
-      guess_df1["pragmatic_score"] = p_low_a_low_p
+      guess_df1["pragmatic_score"] = p_high_a_high_p
       guess_df1["wordpair"] = wordpair
 
       guess_df2 = pd.DataFrame({"guess": wordpairs_in_order })
       guess_df2["clue"] = list(specific_clue_df.high_a_low_p_clue)[0]
       guess_df2["literal_score"] = l_high_a_low_p
-      guess_df2["pragmatic_score"] = p_low_a_low_p
+      guess_df2["pragmatic_score"] = p_high_a_low_p
       guess_df2["wordpair"] = wordpair
 
       guess_df3 = pd.DataFrame({"guess": wordpairs_in_order })
       guess_df3["clue"] = list(specific_clue_df.low_a_high_p_clue)[0]
       guess_df3["literal_score"] = l_low_a_high_p
-      guess_df3["pragmatic_score"] = p_low_a_low_p
+      guess_df3["pragmatic_score"] = p_low_a_high_p
       guess_df3["wordpair"] = wordpair
 
       guess_df4 = pd.DataFrame({"guess": wordpairs_in_order })
@@ -522,7 +522,7 @@ class RSA:
       
 
       guess_scores = pd.concat([guess_scores, guess_df1, guess_df2, guess_df3, guess_df4])
-      guess_scores.to_csv('../data/guess_scores.csv', index = False)
+      guess_scores.to_csv('../data/stimuli/guess_scores.csv', index = False)
 
 
 
@@ -540,7 +540,7 @@ class SWOW:
     self.name_to_index = {v['word'] : k for k,v in self.graph.nodes(data=True)}
 
     # import clues
-    self.clues_df = pd.read_csv(f"../data/clues_final.csv".format())
+    self.clues_df = pd.read_csv(f"../data/stimuli/clues_final.csv".format())
     self.load_random_walks(data_path)
     self.load_clue_walks(data_path)
 
@@ -548,8 +548,8 @@ class SWOW:
     '''
     reads in networkx graph saved as pickle
     '''
-    if os.path.exists(f'{data_path}/walk_data/swow.gpickle') :
-      with open(f'{data_path}/walk_data/swow.gpickle', 'rb') as f:
+    if os.path.exists(f'{data_path}/stimuli/walk_data/swow.gpickle') :
+      with open(f'{data_path}/stimuli/walk_data/swow.gpickle', 'rb') as f:
         self.graph = pickle.load(f)
     else :
       self.save_graph(data_path, None)
@@ -558,19 +558,19 @@ class SWOW:
     '''
     creates graph directly from pandas edge list and saves to file
     '''
-    path = path + '/walk_data/swow_strengths.csv'
+    path = path + '/stimuli/walk_data/swow_strengths.csv'
     edges = pd.read_csv(path).rename(columns={'R123.Strength' : 'weight'})
     G = nx.from_pandas_edgelist(edges, 'cue', 'response', ['weight'], create_using=nx.DiGraph)
     G = nx.convert_node_labels_to_integers(G, label_attribute = 'word')
-    with open('../data/walk_data/swow.gpickle', 'wb') as f:
+    with open('../data/stimuli/walk_data/swow.gpickle', 'wb') as f:
         pickle.dump(G, f, pickle.HIGHEST_PROTOCOL)
 
   def load_random_walks(self, data_path):
     '''
     runs n_walks independent random walks of walk_len length from each words
     '''
-    if os.path.exists(f'{data_path}/walk_data/walks.pkl'):
-      with open(f'{data_path}/walk_data/walks.pkl', 'rb') as f:
+    if os.path.exists(f'{data_path}/stimuli/walk_data/walks.pkl'):
+      with open(f'{data_path}/stimuli/walk_data/walks.pkl', 'rb') as f:
         self.rw = pickle.load(f)
     else :
       self.save_random_walks()
@@ -664,7 +664,7 @@ class SWOW:
   def save_guess_visit_counts(self, budget_list):
     # Loop through specific  clues and boards
     visits = {}
-    with open('../data/boards.json') as json_file:
+    with open('../data/stimuli/boards.json') as json_file:
       final_boards = json.load(json_file)
 
     main_df = pd.DataFrame()
@@ -682,7 +682,7 @@ class SWOW:
         wordpair_df = pd.concat([high_a_high_p_df, high_a_low_p_df,low_a_high_p_df,low_a_low_p_df])
         wordpair_df["wordpair"]= wordpair
         main_df = pd.concat([main_df, wordpair_df])
-        main_df.to_csv('../data/guess_visit_counts.csv', index= False)
+        main_df.to_csv('../data/stimuli/guess_visit_counts.csv', index= False)
     
     return main_df
       
@@ -730,7 +730,7 @@ class SWOW:
       union_nodes = {budget: [x[0] for x in d] for (budget, d) in union_candidates_list.items()}
       unions[w1 + '-' + w2] = {'budget=' + str(budget): self.get_words_by_node(d) for (budget, d) in union_nodes.items()}
 
-    with open('../data/walk_data/union_candidates.json', 'w') as f:
+    with open('../data/stimuli/walk_data/union_candidates.json', 'w') as f:
       json.dump(unions, f)   
 
   def choose_candidates(self, walk_candidates):
@@ -743,7 +743,7 @@ class SWOW:
             bottom = random.sample(walk_candidates[targets]['budget=4'][-10:],2)
             candidates[targets]=top + bottom
         
-        with open('../data/clue_candidates.json', 'w') as f:
+        with open('../data/stimuli/clue_candidates.json', 'w') as f:
             json.dump(candidates, f)
   
   def get_example_walk(self, w1, w2, budget_list):
@@ -762,13 +762,13 @@ class SWOW:
           union = list(set(w1_walk[: search_budget]).union(w2_walk[: search_budget]))
           union_counts[search_budget] = union
 
-      with open('../data/walk_data/example_intersection.json', 'w') as f:
+      with open('../data/stimuli/walk_data/example_intersection.json', 'w') as f:
         json.dump(intersection_counts, f)
 
-      with open('../data/walk_data/example_union.json', 'w') as f:
+      with open('../data/stimuli/walk_data/example_union.json', 'w') as f:
         json.dump(union_counts, f)
 
-      with open('../data/walk_data/example_walk.json', 'w') as f:
+      with open('../data/stimuli/walk_data/example_walk.json', 'w') as f:
         json.dump({w1_walk[0]:w1_walk[:budget_list[0]], w2_walk[0]: w2_walk[:budget_list[0]]}, f)
   
   def get_final_clues(self, vocab, embeddings, final_boards, walk_steps):
@@ -794,10 +794,10 @@ class SWOW:
       union_counts_df = self.union_candidates(row["Word1"], row["Word2"], walk_steps, vocab) 
       print("visit counts complete")
       # compute an np array of scores for different clues in vocab
-      combs = RSA.compute_board_combos(wordpair, final_boards)
+      combs = RSA.compute_board_combos(final_boards)
       wp_index = list(combs.wordpair).index(wordpair)
 
-      x = RSA.pragmatic_speaker(wordpair, embeddings, list(vocab.Word), vocab, final_boards, beta=200)
+      x = RSA.pragmatic_speaker(wordpair, beta=200)
       print("RSA calculation complete")
 
       # need to get the ordered list of pragmatic clues
@@ -826,7 +826,7 @@ class SWOW:
       final_df = final_df[final_df['word'].isin(final_candidates)]
 
       final_df = final_df.reset_index()
-      final_df.to_csv("../data/final_df.csv", index=False)
+      final_df.to_csv("../data/stimuli/final_df.csv", index=False)
 
       # final_df = pd.read_csv("../data/final_df.csv")
       # final_df = final_df[~final_df['word'].isin(current_clues)]
