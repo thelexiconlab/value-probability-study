@@ -198,6 +198,20 @@ c = trials %>%
 n_words_av = mean(c$comma_count)
 rt_av = mean(as.numeric(trials$rt))/1000
 rt_sd = sd(as.numeric(trials$rt))/1000
+
+hrt = trials %>%
+  filter(as.numeric(rt) < 100000) %>%
+  select(rt) %>%
+  mutate(rt = as.numeric(rt)/1000)
+
+outliers = trials %>%
+  filter(as.numeric(rt) > 100000) %>%
+  select(rt)
+
+median(as.numeric(trials$rt))
+
+hist(acc_by_subject$av_acc, xlab = "Accuracy", ylab = "Frequency", main = "", col = "lightblue")
+hist(hrt$rt, xlab = "Reaction Time (ms)", ylab = "Frequency", main = "", col = "lightblue")
 ```
 
 # test if accuracy differs significantly by english age and attention checks
@@ -315,12 +329,42 @@ res.aov <- anova_test(
   )
 
 get_anova_table(res.aov)
+
+one.way <- anova_data %>%
+  group_by(a_level) %>%
+  anova_test(dv = mean_acc, wid = subject, within = p_level) %>%
+  get_anova_table() %>%
+  adjust_pvalue(method = "bonferroni")
+one.way
+
+pwc <- anova_data %>%
+  group_by(a_level) %>%
+  pairwise_t_test(
+    mean_acc ~ p_level, paired = TRUE,
+    p.adjust.method = "bonferroni"
+    )
+pwc
+
+one.way2 <- anova_data %>%
+  group_by(p_level) %>%
+  anova_test(dv = mean_acc, wid = subject, within = a_level) %>%
+  get_anova_table() %>%
+  adjust_pvalue(method = "bonferroni")
+one.way2
+
+pwc2 <- anova_data %>%
+  group_by(p_level) %>%
+  pairwise_t_test(
+    mean_acc ~ a_level, paired = TRUE,
+    p.adjust.method = "bonferroni"
+    )
+pwc2
 ```
 
 # examine properties of the clues
 ```{r}
 trials_by_clue = trials %>%
-  group_by(clue) %>%
+  group_by(clue, clue_type) %>%
   summarise(prags = mean(center_p), accs = mean(center_a), accuracy = mean(accuracy))
 
 clues_by_prag = trials_by_clue %>%
@@ -336,10 +380,13 @@ hist(trials_by_clue$accs)
 hist(trials_by_clue$prags)
 
 cor.test(trials_by_clue$prags, trials_by_clue$accs)
+
+# scatter plot of clues on prags and accs
 trials_by_clue %>%
-  ggplot(aes(x = prags, y = accs)) + 
+  ggplot(aes(x = prags, y = accs, color = clue_type)) + 
   geom_point() + 
-  labs(x = "Pragmatics", y = "Accessibility") +
+  labs(x = "Pragmatics", y = "Accessibility", color = "Clue Type") +
+  scale_color_manual(values = c("darkgreen", "blue", "lightgreen", "lightblue"), labels = c("High Accessibility, High Pragmatics", "High Accessibility, Low Pragmatics", "Low Accessibility, High Pragmatics", "Low Accessibility, Low Pragmatics")) +
   theme_few()
 
 ## VIOLIN PLOT
@@ -349,6 +396,25 @@ ggplot(aes(x=pragmatics_categorical, y=accessibility, fill = pragmatics_categori
   geom_boxplot(width=0.1) +
   theme_few()
 
+clues_by_type = trials %>%
+  select(clue, clue_type, pragmatics, accessibility) %>%
+  group_by(clue, clue_type, pragmatics, accessibility) %>%
+  summarise(a = 1) %>%
+  select(clue, clue_type, pragmatics, accessibility) %>%
+  mutate(prags = ifelse(grepl("low_p", clue_type), "low", "high")) %>%
+  mutate(accs = ifelse(grepl("low_a", clue_type), "low", "high"))
+
+high_prags = clues_by_type %>%
+  filter(prags == "high")
+low_prags = clues_by_type %>%
+  filter(prags == "low")
+high_accs = clues_by_type %>%
+  filter(accs == "high")
+low_accs = clues_by_type %>%
+  filter(accs == "low")
+
+t.test(high_accs$accessibility, low_accs$accessibility)
+t.test(high_prags$pragmatics, low_prags$pragmatics)
 ```
 
 
@@ -420,6 +486,13 @@ summary(models_overall$model[[3]])
 summary(models_overall$model[[4]])
 summary(models_overall$model[[5]])
 ```
+
+# explore top guessed words for cow-dairy board
+```{r}
+sacred = guessed_words %>%
+  filter(clue == "sacred")
+```
+
 
 # are guessers pragmatic?
 
